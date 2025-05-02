@@ -1,10 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { DIContainer } from '@/di';
 import { z } from 'zod';
-import { 
-  createErrorCodeRequest,
-  createErrorCodeResponse
-} from '@/dto/errors';
+import { createErrorCodeRequest } from '@/dto/errors';
 
 /**
  * Route handler for creating a new error code
@@ -12,12 +9,11 @@ import {
 export default function(fastify: FastifyInstance, { repositories }: DIContainer) {
   fastify.post<{
     Body: z.infer<typeof createErrorCodeRequest>;
-    Reply: z.infer<typeof createErrorCodeResponse>;
   }>(
     '/',
     async (request, reply) => {
       try {
-        // Validate request body with Zod
+        // Validate request body
         const validatedData = createErrorCodeRequest.parse(request.body);
         
         // Create the error code
@@ -32,7 +28,7 @@ export default function(fastify: FastifyInstance, { repositories }: DIContainer)
             errors: error.errors
           });
         }
-        throw error; // Let Fastify handle unexpected errors
+        throw error;
       }
     }
   );
