@@ -1,15 +1,15 @@
 import { DataSource } from 'typeorm';
 import { AppDataSource } from './db/data-source';
+import { RepositoryFactory, IErrorCodeRepository } from './db/repositories/index';
 
-// Repository imports
-import { ErrorCodeRepository } from './db/repositories/ErrorCodeRepository';
-import { ErrorCategoryRepository } from './db/repositories/ErrorCategoryRepository';
-import { ErrorTranslationRepository } from './db/repositories/ErrorTranslationRepository';
+// Import repository classes and interfaces
+// import { ErrorCategoryRepository, IErrorCategoryRepository } from './db/repositories/ErrorCategoryRepository';
+// import { ErrorTranslationRepository, IErrorTranslationRepository } from './db/repositories/ErrorTranslationRepository';
 
-// Service imports - these will be created later
-import { ErrorService } from './services/ErrorService';
-import { CategoryService } from './services/CategoryService';
-import { TranslationService } from './services/TranslationService';
+// Import service classes and interfaces (to be created)
+// import { ErrorService, IErrorService } from './services/ErrorService';
+// import { CategoryService, ICategoryService } from './services/CategoryService';
+// import { TranslationService, ITranslationService } from './services/TranslationService';
 
 // DI container type
 export interface DIContainer {
@@ -18,45 +18,47 @@ export interface DIContainer {
   
   // Repositories
   repositories: {
-    errorCode: ErrorCodeRepository;
-    errorCategory: ErrorCategoryRepository;
-    errorTranslation: ErrorTranslationRepository;
+    errorCode: IErrorCodeRepository;
+    // Add others as you implement them
+    // errorCategory: IErrorCategoryRepository;
+    // errorTranslation: IErrorTranslationRepository;
   };
   
   // Services
   services: {
-    error: ErrorService;
-    category: CategoryService;
-    translation: TranslationService;
+    // Add as you implement them
+    // error: IErrorService;
+    // category: ICategoryService;
+    // translation: ITranslationService;
   };
 }
+
+// Initialize AppDataSource first to avoid circular dependencies
+// It's important to do this before importing from './db'
+// Wait for the connection to be established before creating repositories
+export const dataSource = AppDataSource;
 
 /**
  * Creates and initializes the DI container
  */
 export function createContainer(): DIContainer {
-  // Database is already initialized in index.ts
-  const db = AppDataSource;
+  // Use the already initialized database connection
+  const db = dataSource;
   
-  // Repository initialization
+  // Repository initialization with injected DataSource using the factory
   const repositories = {
-    errorCode: new ErrorCodeRepository(),
-    errorCategory: new ErrorCategoryRepository(),
-    errorTranslation: new ErrorTranslationRepository()
+    errorCode: RepositoryFactory.createErrorCodeRepository(db),
+    // Add others as you implement them
+    // errorCategory: new ErrorCategoryRepository(db),
+    // errorTranslation: new ErrorTranslationRepository(db),
   };
   
-  // Service initialization
+  // Service initialization with injected repositories
   const services = {
-    error: new ErrorService(
-      repositories.errorCode,
-      repositories.errorCategory
-    ),
-    category: new CategoryService(
-      repositories.errorCategory
-    ),
-    translation: new TranslationService(
-      repositories.errorTranslation
-    )
+    // Add as you implement them
+    // error: new ErrorService(repositories.errorCode, repositories.errorCategory),
+    // category: new CategoryService(repositories.errorCategory),
+    // translation: new TranslationService(repositories.errorTranslation),
   };
   
   // Return assembled container

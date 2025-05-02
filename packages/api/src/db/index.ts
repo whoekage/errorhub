@@ -1,12 +1,7 @@
 import { initializeDatabase as initialize } from './data-source';
-import { ErrorCodeRepository } from './repositories/ErrorCodeRepository';
-import { ErrorTranslationRepository } from './repositories/ErrorTranslationRepository';
-import { ErrorCategoryRepository } from './repositories/ErrorCategoryRepository';
 
-// Initialize repositories
-export const errorCodeRepository = new ErrorCodeRepository();
-export const errorTranslationRepository = new ErrorTranslationRepository();
-export const errorCategoryRepository = new ErrorCategoryRepository();
+// Direct exports will be replaced by DI container access
+// Do not import repositories directly here to avoid circular dependencies
 
 // Initialize database
 export const initializeDatabase = async () => {
@@ -20,7 +15,7 @@ export const initializeDatabase = async () => {
   }
 };
 
-// Export entities
+// Export entities - these don't cause circular dependencies
 export * from './entities/ErrorCodeEntity';
 export * from './entities/ErrorTranslationEntity';
 export * from './entities/ErrorCategoryEntity'; 

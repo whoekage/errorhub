@@ -42,10 +42,42 @@ export default function(fastify: FastifyInstance, { services }: DIContainer) {
         tags: ['errors'],
         summary: 'Get error by code',
         description: 'Retrieve error details by its unique code',
-        params: ParamsSchema,
-        querystring: QuerySchema,
+        params: {
+          type: 'object',
+          properties: {
+            code: { type: 'string' }
+          },
+          required: ['code']
+        },
+        querystring: {
+          type: 'object',
+          properties: {
+            lang: { type: 'string' }
+          }
+        },
         response: {
-          200: ResponseSchema,
+          200: {
+            type: 'object',
+            properties: {
+              code: { type: 'string' },
+              message: { type: 'string' },
+              description: { type: 'string' },
+              severity: { type: 'string' },
+              categoryId: { type: 'number' },
+              translations: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    language: { type: 'string' },
+                    message: { type: 'string' },
+                    description: { type: 'string' }
+                  }
+                }
+              }
+            },
+            required: ['code', 'message']
+          },
           404: {
             type: 'object',
             properties: {

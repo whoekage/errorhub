@@ -1,13 +1,21 @@
-import { Repository, FindOptionsWhere } from 'typeorm';
+import { Repository, FindOptionsWhere, DataSource } from 'typeorm';
 import { ErrorCodeEntity } from '../entities/ErrorCodeEntity';
-import { AppDataSource } from '../data-source';
 import { CreateErrorCodeDto, UpdateErrorCodeDto } from '../../dto/error-code.dto';
 
-export class ErrorCodeRepository {
+export interface IErrorCodeRepository {
+  findAll(options?: object): Promise<ErrorCodeEntity[]>;
+  findByCode(code: string, options?: object): Promise<ErrorCodeEntity | null>;
+  findByCategoryId(categoryId: number, options?: object): Promise<ErrorCodeEntity[]>;
+  create(data: CreateErrorCodeDto): Promise<ErrorCodeEntity>;
+  update(code: string, data: UpdateErrorCodeDto): Promise<ErrorCodeEntity | null>;
+  delete(code: string): Promise<boolean>;
+}
+
+export class ErrorCodeRepository implements IErrorCodeRepository {
   private repository: Repository<ErrorCodeEntity>;
 
-  constructor() {
-    this.repository = AppDataSource.getRepository(ErrorCodeEntity);
+  constructor(dataSource: DataSource) {
+    this.repository = dataSource.getRepository(ErrorCodeEntity);
   }
 
   /**
