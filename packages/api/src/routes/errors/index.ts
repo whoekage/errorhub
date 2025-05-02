@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { DIContainer } from '../../di';
+import { DIContainer } from '@/di';
 
 // Import route handlers (will be created later)
 import getByCode from './get-by-code';

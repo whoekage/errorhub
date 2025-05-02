@@ -1,45 +1,33 @@
 import { FastifyInstance } from 'fastify';
 import { DIContainer } from '@/di';
+import { 
+  createErrorCodeRequest,
+  createErrorCodeResponse
+} from '@/dto/errors';
 
 /**
  * Route handler for creating a new error code
  */
-export default function(fastify: FastifyInstance, { services }: DIContainer) {
-  fastify.post(
+export default function(fastify: FastifyInstance, { repositories }: DIContainer) {
+  fastify.post<{
+    Body: typeof createErrorCodeRequest._type;
+    Reply: typeof createErrorCodeResponse._type;
+  }>(
     '/',
     {
       schema: {
         tags: ['errors'],
         summary: 'Create new error code',
         description: 'Create a new error code with details',
-        body: {
-          type: 'object',
-          required: ['code', 'message'],
-          properties: {
-            code: { type: 'string' },
-            message: { type: 'string' },
-            description: { type: 'string' },
-            severity: { type: 'string' },
-            categoryId: { type: 'number' }
-          }
-        },
+        body: createErrorCodeRequest,
         response: {
-          201: {
-            type: 'object',
-            properties: {
-              code: { type: 'string' },
-              message: { type: 'string' },
-              description: { type: 'string' },
-              severity: { type: 'string' },
-              categoryId: { type: 'number' }
-            }
-          }
+          201: createErrorCodeResponse
         }
       }
     },
     async (request, reply) => {
-      const result = await services.error.createError(request.body as any);
-      return reply.code(201).send(result);
+      const newErrorCode = await repositories.errorCode.create(request.body);
+      return reply.code(201).send(newErrorCode);
     }
   );
 } 

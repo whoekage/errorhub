@@ -1,68 +1,63 @@
 import { FastifyInstance } from 'fastify';
-import { DIContainer } from '../../di';
+import { DIContainer } from '@/di';
+import { 
+  updateErrorCodeRequest,
+  updateErrorCodeResponse
+} from '@/dto/errors';
+import { z } from 'zod';
+
+// Define params schema
+const paramsSchema = z.object({
+  code: z.string()
+    .min(3, 'Error code must be at least 3 characters')
+    .max(50, 'Error code must be at most 50 characters')
+});
+
+// Define error response schema
+const errorResponseSchema = z.object({
+  error: z.object({
+    code: z.string(),
+    message: z.string()
+  })
+});
 
 /**
  * Route handler for updating an existing error code
  */
-export default function(fastify: FastifyInstance, { services }: DIContainer) {
-  fastify.put(
+export default function(fastify: FastifyInstance, { repositories }: DIContainer) {
+  fastify.put<{
+    Params: typeof paramsSchema._type;
+    Body: typeof updateErrorCodeRequest._type;
+    Reply: typeof updateErrorCodeResponse._type | typeof errorResponseSchema._type;
+  }>(
     '/:code',
     {
       schema: {
         tags: ['errors'],
         summary: 'Update error code',
         description: 'Update an existing error code details',
-        params: {
-          type: 'object',
-          required: ['code'],
-          properties: {
-            code: { type: 'string' }
-          }
-        },
-        body: {
-          type: 'object',
-          properties: {
-            message: { type: 'string' },
-            description: { type: 'string' },
-            severity: { type: 'string' },
-            categoryId: { type: 'number' }
-          }
-        },
+        params: paramsSchema,
+        body: updateErrorCodeRequest,
         response: {
-          200: {
-            type: 'object',
-            properties: {
-              code: { type: 'string' },
-              message: { type: 'string' },
-              description: { type: 'string' },
-              severity: { type: 'string' },
-              categoryId: { type: 'number' }
-            }
-          },
-          404: {
-            type: 'object',
-            properties: {
-              statusCode: { type: 'number' },
-              error: { type: 'string' },
-              message: { type: 'string' }
-            }
-          }
+          200: updateErrorCodeResponse,
+          404: errorResponseSchema
         }
       }
     },
     async (request, reply) => {
-      const { code } = request.params as { code: string };
-      const result = await services.error.updateError(code, request.body as any);
+      const { code } = request.params;
+      const updatedErrorCode = await repositories.errorCode.update(code, request.body);
       
-      if (!result) {
+      if (!updatedErrorCode) {
         return reply.code(404).send({
-          statusCode: 404,
-          error: 'Not Found',
-          message: `Error code ${code} not found`
+          error: {
+            code: 'ERROR.NOT_FOUND',
+            message: `Error code ${code} not found`
+          }
         });
       }
       
-      return result;
+      return updatedErrorCode;
     }
   );
 } 

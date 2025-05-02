@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { DIContainer } from '../di';
+import { DIContainer } from '@/di';
 
 // Import routes groups (will be created later)
 import errorRoutes from './errors';
