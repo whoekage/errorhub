@@ -31,19 +31,6 @@ export default function(fastify: FastifyInstance, { repositories }: DIContainer)
     Reply: typeof updateErrorCodeResponse._type | typeof errorResponseSchema._type;
   }>(
     '/:code',
-    {
-      schema: {
-        tags: ['errors'],
-        summary: 'Update error code',
-        description: 'Update an existing error code details',
-        params: paramsSchema,
-        body: updateErrorCodeRequest,
-        response: {
-          200: updateErrorCodeResponse,
-          404: errorResponseSchema
-        }
-      }
-    },
     async (request, reply) => {
       const { code } = request.params;
       const updatedErrorCode = await repositories.errorCode.update(code, request.body);

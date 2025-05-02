@@ -1,105 +1,54 @@
 import { FastifyInstance } from 'fastify';
-import { DIContainer } from '../../di';
+import { DIContainer } from '@/di';
 import { z } from 'zod';
+import { createErrorCodeResponse } from '@/dto/errors';
 
 // Parameter validation schema
-const ParamsSchema = z.object({
-  code: z.string().min(1)
+const paramsSchema = z.object({
+  code: z.string().min(1, 'Error code is required')
 });
 
 // Query validation schema
-const QuerySchema = z.object({
+const querySchema = z.object({
   lang: z.string().optional()
 });
 
-// Response schema
-const ResponseSchema = z.object({
-  code: z.string(),
-  message: z.string(),
-  description: z.string().optional(),
-  severity: z.string().optional(),
-  categoryId: z.number().optional(),
-  translations: z.array(
-    z.object({
-      language: z.string(),
-      message: z.string(),
-      description: z.string().optional()
-    })
-  ).optional()
+type Params = z.infer<typeof paramsSchema>;
+type Query = z.infer<typeof querySchema>;
+
+// Error response schema
+const errorResponseSchema = z.object({
+  statusCode: z.number(),
+  error: z.string(),
+  message: z.string()
 });
+
+type ErrorResponse = z.infer<typeof errorResponseSchema>;
 
 /**
  * Route handler for getting an error by code
  */
-export default function(fastify: FastifyInstance, { services }: DIContainer) {
+export default function(fastify: FastifyInstance, { repositories }: DIContainer) {
   fastify.get<{
-    Params: z.infer<typeof ParamsSchema>;
-    Querystring: z.infer<typeof QuerySchema>;
+    Params: Params;
+    Querystring: Query;
+    Reply: z.infer<typeof createErrorCodeResponse> | ErrorResponse;
   }>(
     '/:code',
-    {
-      schema: {
-        tags: ['errors'],
-        summary: 'Get error by code',
-        description: 'Retrieve error details by its unique code',
-        params: {
-          type: 'object',
-          properties: {
-            code: { type: 'string' }
-          },
-          required: ['code']
-        },
-        querystring: {
-          type: 'object',
-          properties: {
-            lang: { type: 'string' }
-          }
-        },
-        response: {
-          200: {
-            type: 'object',
-            properties: {
-              code: { type: 'string' },
-              message: { type: 'string' },
-              description: { type: 'string' },
-              severity: { type: 'string' },
-              categoryId: { type: 'number' },
-              translations: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    language: { type: 'string' },
-                    message: { type: 'string' },
-                    description: { type: 'string' }
-                  }
-                }
-              }
-            },
-            required: ['code', 'message']
-          },
-          404: {
-            type: 'object',
-            properties: {
-              statusCode: { type: 'number' },
-              error: { type: 'string' },
-              message: { type: 'string' }
-            }
-          }
-        }
-      }
-    },
     async (request, reply) => {
-      const { code } = request.params;
-      const { lang } = request.query;
+      // Validate params and query
+      const params = paramsSchema.parse(request.params);
+      const query = querySchema.parse(request.query);
       
-      const error = await services.error.getErrorByCode(code, lang);
+      const error = await repositories.errorCode.findByCode(params.code, { 
+        relations: query.lang ? ['translations'] : [] 
+      });
       
       if (!error) {
         return reply.code(404).send({
           statusCode: 404,
           error: 'Not Found',
-          message: `Error code ${code} not found`
+          message: `Error code ${params.code} not found`
         });
       }
       

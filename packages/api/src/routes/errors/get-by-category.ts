@@ -1,54 +1,52 @@
 import { FastifyInstance } from 'fastify';
-import { DIContainer } from '../../di';
+import { DIContainer } from '@/di';
+import { z } from 'zod';
+
+/**
+ * Parameter validation schema
+ */
+const paramsSchema = z.object({
+  categoryId: z.string().transform(val => parseInt(val, 10))
+    .refine(val => !isNaN(val) && val > 0, 'Category ID must be a positive integer')
+});
+
+type Params = z.infer<typeof paramsSchema>;
 
 /**
  * Route handler for getting errors by category
  */
-export default function(fastify: FastifyInstance, { services }: DIContainer) {
-  fastify.get(
-    '/by-category/:categoryId',
-    {
-      schema: {
-        tags: ['errors'],
-        summary: 'Get errors by category',
-        description: 'Retrieve all errors belonging to a specific category',
-        params: {
-          type: 'object',
-          required: ['categoryId'],
-          properties: {
-            categoryId: { type: 'number' }
-          }
-        },
-        response: {
-          200: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                code: { type: 'string' },
-                message: { type: 'string' },
-                description: { type: 'string' },
-                severity: { type: 'string' },
-                categoryId: { type: 'number' }
-              }
-            }
-          }
-        }
-      }
-    },
+export default function(fastify: FastifyInstance, { repositories }: DIContainer) {
+  fastify.get<{
+    Params: Params;
+  }>(
+    '/category/:categoryId',
     async (request, reply) => {
-      const { categoryId } = request.params as { categoryId: string };
-      const id = parseInt(categoryId, 10);
-      
-      if (isNaN(id)) {
-        return reply.code(400).send({
-          statusCode: 400,
-          error: 'Bad Request',
-          message: 'Category ID must be a number'
-        });
+      try {
+        // Validate params
+        const params = paramsSchema.parse(request.params);
+        
+        const errors = await repositories.errorCode.findByCategoryId(params.categoryId);
+        
+        if (!errors || errors.length === 0) {
+          return reply.code(404).send({
+            statusCode: 404,
+            error: 'Not Found',
+            message: `No errors found for category ID ${params.categoryId}`
+          });
+        }
+        
+        return errors;
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return reply.code(400).send({
+            statusCode: 400,
+            error: 'Validation Error',
+            message: error.errors[0].message,
+            errors: error.errors
+          });
+        }
+        throw error;
       }
-      
-      return services.error.getErrorsByCategory(id);
     }
   );
 } 

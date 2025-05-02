@@ -1,43 +1,23 @@
 import { FastifyInstance } from 'fastify';
-import { DIContainer } from '../../di';
+import { DIContainer } from '@/di';
+import { createErrorTranslationRequest, createErrorTranslationResponse } from '@/dto/translations';
+import { z } from 'zod';
 
 /**
  * Route handler for creating or updating a translation
  */
-export default function(fastify: FastifyInstance, { services }: DIContainer) {
-  fastify.post(
+export default function(fastify: FastifyInstance, { repositories }: DIContainer) {
+  fastify.post<{
+    Body: z.infer<typeof createErrorTranslationRequest>;
+    Reply: z.infer<typeof createErrorTranslationResponse>;
+  }>(
     '/',
-    {
-      schema: {
-        tags: ['translations'],
-        summary: 'Create or update translation',
-        description: 'Create a new translation or update an existing one',
-        body: {
-          type: 'object',
-          required: ['errorCode', 'language', 'message'],
-          properties: {
-            errorCode: { type: 'string' },
-            language: { type: 'string' },
-            message: { type: 'string' },
-            description: { type: 'string' }
-          }
-        },
-        response: {
-          200: {
-            type: 'object',
-            properties: {
-              id: { type: 'number' },
-              errorCode: { type: 'string' },
-              language: { type: 'string' },
-              message: { type: 'string' },
-              description: { type: 'string' }
-            }
-          }
-        }
-      }
-    },
     async (request, reply) => {
-      const result = await services.translation.upsertTranslation(request.body as any);
+      // Validate request body
+      const validatedData = createErrorTranslationRequest.parse(request.body);
+      
+      // Create or update the translation
+      const result = await repositories.errorTranslation.upsert(validatedData);
       return reply.code(200).send(result);
     }
   );

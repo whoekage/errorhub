@@ -1,39 +1,23 @@
 import { FastifyInstance } from 'fastify';
-import { DIContainer } from '../../di';
+import { DIContainer } from '@/di';
+import { createErrorCategoryRequest, createErrorCategoryResponse } from '@/dto/categories';
+import { z } from 'zod';
 
 /**
  * Route handler for creating a new category
  */
-export default function(fastify: FastifyInstance, { services }: DIContainer) {
-  fastify.post(
+export default function(fastify: FastifyInstance, { repositories }: DIContainer) {
+  fastify.post<{
+    Body: z.infer<typeof createErrorCategoryRequest>;
+    Reply: z.infer<typeof createErrorCategoryResponse>;
+  }>(
     '/',
-    {
-      schema: {
-        tags: ['categories'],
-        summary: 'Create new category',
-        description: 'Create a new error category',
-        body: {
-          type: 'object',
-          required: ['name'],
-          properties: {
-            name: { type: 'string' },
-            description: { type: 'string' }
-          }
-        },
-        response: {
-          201: {
-            type: 'object',
-            properties: {
-              id: { type: 'number' },
-              name: { type: 'string' },
-              description: { type: 'string' }
-            }
-          }
-        }
-      }
-    },
     async (request, reply) => {
-      const result = await services.category.createCategory(request.body as any);
+      // Validate request body
+      const validatedData = createErrorCategoryRequest.parse(request.body);
+      
+      // Create the category
+      const result = await repositories.errorCategory.create(validatedData);
       return reply.code(201).send(result);
     }
   );

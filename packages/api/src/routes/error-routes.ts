@@ -1,9 +1,9 @@
 import { FastifyInstance } from 'fastify';
-import { NotFoundError } from '../middleware/error-handler';
+import { NotFoundError } from '@/middleware/error-handler';
 import {
-  CreateErrorCodeDto,
-  UpdateErrorCodeDto
-} from '../dto/error-code.dto';
+  createErrorCodeRequest,
+  updateErrorCodeRequest
+} from '@/dto/errors';
 
 interface ErrorCodeParams {
   code: string;
@@ -29,23 +29,6 @@ export default async function (fastify: FastifyInstance) {
    */
   fastify.get<{ Params: ErrorCodeParams; Querystring: { lang?: string } }>(
     '/:code',
-    {
-      schema: {
-        params: {
-          type: 'object',
-          properties: {
-            code: { type: 'string' }
-          },
-          required: ['code']
-        },
-        querystring: {
-          type: 'object',
-          properties: {
-            lang: { type: 'string' }
-          }
-        }
-      }
-    },
     async (request) => {
       const { code } = request.params;
       const lang = request.query.lang || 'en';
@@ -79,16 +62,8 @@ export default async function (fastify: FastifyInstance) {
    * @route POST /api/errors
    * @desc Create a new error
    */
-  fastify.post<{ Body: CreateErrorCodeDto }>(
+  fastify.post<{ Body: typeof createErrorCodeRequest._type }>(
     '/',
-    {
-      schema: {
-        body: {
-          type: 'object',
-          required: ['code', 'categoryId', 'defaultMessage']
-        }
-      }
-    },
     async (request, reply) => {
       try {
         const newErrorCode = await errorCode.create(request.body);
@@ -103,19 +78,8 @@ export default async function (fastify: FastifyInstance) {
    * @route PUT /api/errors/:code
    * @desc Update error information
    */
-  fastify.put<{ Params: ErrorCodeParams; Body: UpdateErrorCodeDto }>(
+  fastify.put<{ Params: ErrorCodeParams; Body: typeof updateErrorCodeRequest._type }>(
     '/:code',
-    {
-      schema: {
-        params: {
-          type: 'object',
-          properties: {
-            code: { type: 'string' }
-          },
-          required: ['code']
-        }
-      }
-    },
     async (request, reply) => {
       const { code } = request.params;
       const updatedErrorCode = await errorCode.update(code, request.body);
@@ -134,17 +98,6 @@ export default async function (fastify: FastifyInstance) {
    */
   fastify.delete<{ Params: ErrorCodeParams }>(
     '/:code',
-    {
-      schema: {
-        params: {
-          type: 'object',
-          properties: {
-            code: { type: 'string' }
-          },
-          required: ['code']
-        }
-      }
-    },
     async (request, reply) => {
       const { code } = request.params;
       const deleted = await errorCode.delete(code);
