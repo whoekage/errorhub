@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 import { errorHandler } from './middleware/error-handler';
 import routes from './routes';
 import { initializeDatabase } from './db';
+import diPlugin from './plugins/di-plugin';
 
 // Load environment variables
 dotenv.config();
@@ -53,6 +54,9 @@ const start = async () => {
     await fastify.register(fastifySwaggerUi, {
       routePrefix: '/documentation',
     });
+    
+    // Register DI container
+    await fastify.register(diPlugin);
     
     // JSON support is configured by default in Fastify
 

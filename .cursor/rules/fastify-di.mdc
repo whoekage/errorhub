@@ -1,0 +1,385 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Fastify Dependency Injection Pattern
+
+This document outlines the recommended approach for implementing Dependency Injection (DI) in Fastify applications, including container organization and usage in routes.
+
+## DI Container Structure
+
+### Core DI File
+
+The DI container should be organized in a separate `di.ts` file with step-by-step creation of all required dependencies:
+
+```typescript
+// src/di.ts
+import { DataSource } from 'typeorm';
+import { appDataSource } from './db/data-source';
+
+// Repository imports
+import { ErrorRepository } from './repositories/error-repository';
+import { CategoryRepository } from './repositories/category-repository';
+import { ErrorTranslationRepository } from './repositories/error-translation-repository';
+
+// Service imports
+import { ErrorService } from './services/error-service';
+import { CategoryService } from './services/category-service';
+
+// DI container type
+export interface DIContainer {
+  // Database
+  db: DataSource;
+  
+  // Repositories
+  repositories: {
+    error: ErrorRepository;
+    category: CategoryRepository;
+    translation: ErrorTranslationRepository;
+  };
+  
+  // Services
+  services: {
+    error: ErrorService;
+    category: CategoryService;
+  };
+}
+
+/**
+ * Creates and initializes the DI container
+ */
+export function createContainer(): DIContainer {
+  // Database initialization
+  const db = appDataSource;
+  
+  // Repository initialization
+  const repositories = {
+    error: new ErrorRepository(db),
+    category: new CategoryRepository(db),
+    translation: new ErrorTranslationRepository(db)
+  };
+  
+  // Service initialization
+  const services = {
+    error: new ErrorService(
+      repositories.error,
+      repositories.category,
+      repositories.translation
+    ),
+    category: new CategoryService(
+      repositories.category
+    )
+  };
+  
+  // Return assembled container
+  return {
+    db,
+    repositories,
+    services
+  };
+}
+
+// Create singleton container instance
+export const container = createContainer();
+```
+
+### DI Registration Plugin
+
+Create a dedicated Fastify plugin to register the DI container:
+
+```typescript
+// src/plugins/di-plugin.ts
+import fp from 'fastify-plugin';
+import { container } from '../di';
+
+export default fp(async (fastify) => {
+  // Register container as fastify decorator
+  fastify.decorate('di', container);
+  
+  // Optional: register commonly used dependencies directly
+  fastify.decorate('errorService', container.services.error);
+  fastify.decorate('categoryService', container.services.category);
+});
+```
+
+## Route Organization
+
+### Route Directory Structure
+
+Follow the "one route - one file" principle:
+
+```
+src/
+└── routes/
+    ├── index.ts              # Main routes file
+    ├── errors/               # Error management routes
+    │   ├── get-by-code.ts    # GET /errors/:code
+    │   ├── create.ts         # POST /errors
+    │   ├── update.ts         # PUT /errors/:code
+    │   ├── delete.ts         # DELETE /errors/:code
+    │   └── get-all.ts        # GET /errors
+    └── categories/           # Category routes
+        ├── get-by-id.ts      # GET /categories/:id
+        ├── create.ts         # POST /categories
+        └── ...
+```
+
+### Route File Template
+
+Each route file should export a function that accepts a fastify instance and DI container:
+
+```typescript
+// src/routes/errors/get-by-code.ts
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { DIContainer } from '../../di';
+
+interface Params {
+  code: string;
+}
+
+interface QueryString {
+  lang?: string;
+}
+
+export default function(fastify: FastifyInstance, { services }: DIContainer) {
+  fastify.get<{
+    Params: Params;
+    Querystring: QueryString;
+  }>(
+    '/:code',
+    {
+      schema: {
+        tags: ['errors'],
+        summary: 'Get error by code',
+        params: {
+          type: 'object',
+          required: ['code'],
+          properties: {
+            code: { type: 'string' }
+          }
+        },
+        querystring: {
+          type: 'object',
+          properties: {
+            lang: { type: 'string' }
+          }
+        },
+        response: {
+          200: {
+            // Response schema...
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      const { code } = request.params;
+      const { lang } = request.query;
+      
+      // Use service from DI container
+      return services.error.getErrorByCode(code, lang);
+    }
+  );
+}
+```
+
+### Route Registration
+
+```typescript
+// src/routes/index.ts
+import { FastifyInstance } from 'fastify';
+import { DIContainer } from '../di';
+
+// Import error routes
+import getErrorByCode from './errors/get-by-code';
+import createError from './errors/create';
+import updateError from './errors/update';
+import deleteError from './errors/delete';
+import getAllErrors from './errors/get-all';
+
+// Import category routes
+import getCategoryById from './categories/get-by-id';
+import createCategory from './categories/create';
+// Other route imports...
+
+export default async function(fastify: FastifyInstance) {
+  // Get DI container
+  const di = fastify.di as DIContainer;
+  
+  // Register error routes
+  fastify.register((instance, opts, done) => {
+    getErrorByCode(instance, di);
+    createError(instance, di);
+    updateError(instance, di);
+    deleteError(instance, di);
+    getAllErrors(instance, di);
+    done();
+  }, { prefix: '/errors' });
+  
+  // Register category routes
+  fastify.register((instance, opts, done) => {
+    getCategoryById(instance, di);
+    createCategory(instance, di);
+    // Other route registrations...
+    done();
+  }, { prefix: '/categories' });
+}
+```
+
+## Main Application Integration
+
+```typescript
+// src/index.ts
+import Fastify from 'fastify';
+import diPlugin from './plugins/di-plugin';
+import routes from './routes';
+
+async function start() {
+  const fastify = Fastify({
+    logger: true,
+    // Other options...
+  });
+  
+  // Register DI plugin
+  await fastify.register(diPlugin);
+  
+  // Register all routes
+  await fastify.register(routes, { prefix: '/api' });
+  
+  // Start server
+  await fastify.listen({ port: 4000 });
+}
+
+start().catch(err => {
+  console.error(err);
+  process.exit(1);
+});
+```
+
+## TypeScript Type Definitions
+
+To properly work with TypeScript, extend Fastify types:
+
+```typescript
+// In a separate file (e.g., types.d.ts)
+import { DIContainer } from './di';
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    di: DIContainer;
+    
+    // Optional, for convenience:
+    errorService: DIContainer['services']['error'];
+    categoryService: DIContainer['services']['category'];
+  }
+}
+```
+
+## Testing with DI Mocks
+
+For testing, create a mock DI container:
+
+```typescript
+// tests/di-mock.ts
+import { DIContainer } from '../src/di';
+
+export function createMockContainer(): DIContainer {
+  // Repository mocks
+  const repositories = {
+    error: {
+      findByCode: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+      findAll: jest.fn()
+    },
+    category: {
+      // Method mocks...
+    },
+    translation: {
+      // Method mocks...
+    }
+  };
+  
+  // Service mocks
+  const services = {
+    error: {
+      getErrorByCode: jest.fn(),
+      createError: jest.fn(),
+      updateError: jest.fn(),
+      deleteError: jest.fn(),
+      getAllErrors: jest.fn()
+    },
+    category: {
+      // Method mocks...
+    }
+  };
+  
+  return {
+    db: {} as any, // Mock DB
+    repositories,
+    services
+  };
+}
+```
+
+Then in tests:
+
+```typescript
+// tests/routes/errors/get-by-code.test.ts
+import Fastify from 'fastify';
+import getErrorByCode from '../../../src/routes/errors/get-by-code';
+import { createMockContainer } from '../../di-mock';
+
+describe('GET /errors/:code', () => {
+  let fastify;
+  let mockContainer;
+  
+  beforeEach(() => {
+    fastify = Fastify();
+    mockContainer = createMockContainer();
+    
+    // Register route with mock container
+    getErrorByCode(fastify, mockContainer);
+  });
+  
+  afterEach(() => {
+    fastify.close();
+  });
+  
+  it('should return error by code', async () => {
+    // Setup mock
+    mockContainer.services.error.getErrorByCode.mockResolvedValue({
+      code: 'TEST.ERROR',
+      message: 'Test error',
+      // Other fields...
+    });
+    
+    // Execute request
+    const response = await fastify.inject({
+      method: 'GET',
+      url: '/TEST.ERROR'
+    });
+    
+    // Check result
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.payload)).toMatchObject({
+      code: 'TEST.ERROR',
+      message: 'Test error'
+    });
+    
+    // Verify mock call
+    expect(mockContainer.services.error.getErrorByCode).toHaveBeenCalledWith('TEST.ERROR', undefined);
+  });
+});
+```
+
+## Advantages of This Approach
+
+1. **Explicit dependencies**: All dependencies are defined in one place and explicitly passed to routes
+2. **One route - one file**: Clean code organization
+3. **Easy testing**: Any dependency can be easily mocked
+4. **Type safety**: TypeScript ensures typing of all dependencies
+5. **Flexibility**: Any component can be easily replaced when needed
+
+This approach provides a good balance between simplicity, flexibility, and code maintainability.

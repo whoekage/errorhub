@@ -1,24 +1,33 @@
 import { FastifyInstance } from 'fastify';
-import errorRoutes from './error-routes';
-import categoryRoutes from './category-routes';
-import { registerZodErrorHandler } from '../middleware/schema-validation';
+import { DIContainer } from '../di';
 
-export default async function routes(fastify: FastifyInstance, options: object) {
-  // Register Zod error handler
-  registerZodErrorHandler(fastify);
-  
-  // Base API route
-  fastify.get('/', async () => {
-    return {
-      name: 'ErrorHub API',
-      version: '0.1.0',
-      status: 'ok'
-    };
-  });
+// Import routes groups (will be created later)
+import errorRoutes from './errors';
+import categoryRoutes from './categories';
+import translationRoutes from './translations';
 
-  // Error management routes
-  fastify.register(errorRoutes, { prefix: '/errors' });
+/**
+ * Main router function that registers all route groups
+ */
+export default async function (fastify: FastifyInstance) {
+  // Get DI container
+  const di = fastify.di as DIContainer;
   
-  // Category management routes
-  fastify.register(categoryRoutes, { prefix: '/categories' });
+  // Register error code routes
+  fastify.register((instance, opts, done) => {
+    errorRoutes(instance, di);
+    done();
+  }, { prefix: '/errors' });
+  
+  // Register category routes
+  fastify.register((instance, opts, done) => {
+    categoryRoutes(instance, di);
+    done();
+  }, { prefix: '/categories' });
+  
+  // Register translation routes
+  fastify.register((instance, opts, done) => {
+    translationRoutes(instance, di);
+    done();
+  }, { prefix: '/translations' });
 } 
