@@ -220,7 +220,6 @@ errorHub/
 │   │       ├── routes/
 │   │       │   ├── index.ts
 │   │       │   └── error-routes.ts
-│   │       ├── controllers/
 │   │       ├── services/
 │   │       └── index.ts
 │   ├── admin-ui/

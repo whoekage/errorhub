@@ -1,6 +1,6 @@
 ---
-description:
-globs:
+description: 
+globs: 
 alwaysApply: true
 ---
 # API Package Guidelines
@@ -9,8 +9,7 @@ The API package implements the ErrorHub REST API server using Fastify.
 
 ## Structure
 
-- [packages/api/src/routes](mdc:packages/api/src/routes) - API route definitions
-- [packages/api/src/controllers](mdc:packages/api/src/controllers) - Request handlers
+- [packages/api/src/routes](mdc:packages/api/src/routes) - API route definitions and request handlers
 - [packages/api/src/services](mdc:packages/api/src/services) - Business logic
 - [packages/api/src/middleware](mdc:packages/api/src/middleware) - Request/response middleware
 
