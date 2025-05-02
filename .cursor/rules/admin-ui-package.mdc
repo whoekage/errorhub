@@ -1,0 +1,42 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# Admin UI Package Guidelines
+
+The Admin UI package provides a web interface for managing error codes and translations.
+
+## Structure
+
+- [packages/admin-ui/src/components](mdc:packages/admin-ui/src/components) - React components
+- [packages/admin-ui/src/pages](mdc:packages/admin-ui/src/pages) - Page components
+- [packages/admin-ui/src/services](mdc:packages/admin-ui/src/services) - API integration
+
+## Component Design
+
+- Use functional components with hooks
+- Reuse components from the shared-ui package
+- Follow a consistent naming convention
+- Create small, focused components
+
+## State Management
+
+- Use React context for global state
+- Keep component state local when possible
+- Use React Query for API data fetching
+- Handle loading and error states properly
+
+## Accessibility
+
+- Use semantic HTML elements
+- Include ARIA attributes where necessary
+- Ensure keyboard navigation works properly
+- Test with screen readers and other assistive technologies
+
+## Internationalization
+
+- Support multiple languages in the Admin UI itself
+- Use a consistent i18n solution
+- Avoid hardcoded text strings
+- Handle right-to-left languages when applicable

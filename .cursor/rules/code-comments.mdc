@@ -1,0 +1,26 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# Code Commenting Guidelines
+
+## Language
+
+- All code comments must be written in English only
+- Use clear, concise language
+- Avoid slang, jargon, or region-specific idioms
+
+## When to Comment
+
+- Comment complex algorithms or business logic
+- Document public APIs and exported functions
+- Explain non-obvious workarounds or edge cases
+- Provide context for important decisions
+
+## Comment Format
+
+- Use JSDoc style comments for functions and classes
+- Keep inline comments brief
+- Use TODO, FIXME, and NOTE prefixes when appropriate
+- For multi-line comments, maintain consistent indentation

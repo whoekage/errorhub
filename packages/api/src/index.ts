@@ -7,6 +7,7 @@ import fastifyRequestLogger from '@mgcrea/fastify-request-logger';
 import dotenv from 'dotenv';
 import { errorHandler } from './middleware/error-handler';
 import routes from './routes';
+import { initializeDatabase } from './db';
 
 // Load environment variables
 dotenv.config();
@@ -29,6 +30,13 @@ const port: number = parseInt(process.env.PORT || '4000', 10);
 // Application startup function
 const start = async () => {
   try {
+    // Initialize database
+    const dbInitialized = await initializeDatabase();
+    if (!dbInitialized) {
+      fastify.log.error('Failed to initialize database. Exiting...');
+      process.exit(1);
+    }
+    
     // Register plugins
     await fastify.register(fastifyHelmet); // Security
     await fastify.register(fastifyCors); // CORS

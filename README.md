@@ -15,19 +15,12 @@ ErrorHub is a centralized error management system with message localization. The
 
 The project is built as a monorepo using npm workspaces and includes the following packages:
 
-- `packages/common` - common types and utilities
 - `packages/sdk` - SDK for working with the error API
 - `packages/api` - REST API server
 - `packages/admin-ui` - administrative interface
 - `packages/shared-ui` - shared UI components
 
-### Common package
 
-Contains common data types, including:
-
-- Error schemas and their structure
-- Category and severity level enumerations
-- Request and response types
 
 ### SDK package
 
@@ -208,10 +201,6 @@ ErrorHub is built on the following principles:
 ```
 errorHub/
 ├── packages/
-│   ├── common/
-│   │   └── src/
-│   │       └── types/
-│   │           └── error.ts
 │   ├── sdk/
 │   │   ├── core/
 │   │   │   ├── client/

@@ -1,0 +1,77 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# ErrorHub DB Layer Refactoring
+
+## Current Problems
+
+### Mixed Validation Schemas and Data Models
+- Duplication between TypeORM entities in [packages/api/src/db/entities/ErrorCodeEntity.ts](mdc:packages/api/src/db/entities/ErrorCodeEntity.ts) and Zod schemas in [packages/api/src/db/validation/schemas.ts](mdc:packages/api/src/db/validation/schemas.ts)
+- Creates inconsistency and complicates maintenance
+
+### Redundant Common Package
+- The common package contains only types but creates additional dependencies
+- Makes it difficult to create specialized SDKs for other languages
+- See import in [packages/api/src/db/entities/ErrorCodeEntity.ts](mdc:packages/api/src/db/entities/ErrorCodeEntity.ts): `import { ErrorCategory } from '@errorhub/common';`
+
+### Insufficient DTO Specialization
+- Lack of clear DTO objects for validating incoming API data
+- Current validation doesn't fully separate API and data concerns
+- Direct usage of entity types in routes like [packages/api/src/routes/error-routes.ts](mdc:packages/api/src/routes/error-routes.ts)
+
+### Type Inconsistencies
+- `ErrorCategory` is treated as a static enum but should be a dynamic database entity
+- Current implementation doesn't match business requirements
+
+## Refactoring Requirements
+
+### Remove packages/common and Move Necessary Code to API and SDK
+- Completely eliminate the common package
+- Update dependencies between packages
+- Ensure SDK independence from API internal structures
+
+### Create DTO Layer for API
+- Create a separate dto/ folder in the API package
+- Implement DTOs for all CRUD operations
+- Implement input data validation using Zod
+- Separate from DB entities in [packages/api/src/db/entities](mdc:packages/api/src/db/entities)
+
+### Revise Data Models for Dynamic Categories
+- Create an entity for ErrorCategory in the database
+- Add relationships between categories and error codes
+- Modify [packages/api/src/db/repositories/ErrorCodeRepository.ts](mdc:packages/api/src/db/repositories/ErrorCodeRepository.ts) to accommodate these changes
+
+### Update Repositories and Routes
+- Adapt all existing repositories to work with the new structure
+- Update API routes to use the new DTOs
+- Refactor [packages/api/src/routes/error-routes.ts](mdc:packages/api/src/routes/error-routes.ts) to use DTOs instead of direct entity access
+
+## Justification
+
+### Improved Architecture
+- Eliminating the common package will create clearer boundaries between components
+- API will contain everything related to the server-side
+- SDK will depend only on the public API
+
+### Increased Component Independence
+- Creating separate types in SDK will make it easier to implement SDKs for other programming languages
+- SDK won't depend on the internal structure of the API, only on its public interface
+
+### Enhanced Data Validation
+- Using DTOs with Zod schemas for input data validation will increase API reliability
+- Each endpoint will have clearly defined input data requirements
+- Improves documentation and reduces errors
+
+### Business Requirements Compliance
+- According to PRD, error categories should be created in the admin panel
+- ErrorCategory should be a database entity, not a static enumeration
+- This refactoring will align the code with product requirements
+
+### Simplified Maintenance
+- Moving validation to DTOs and clear separation of responsibilities makes the code more understandable
+- Each change will only affect the component that actually needs to change
+- Repositories like [packages/api/src/db/repositories/ErrorTranslationRepository.ts](mdc:packages/api/src/db/repositories/ErrorTranslationRepository.ts) will have clearer responsibilities
+
+This refactoring will make the project architecture more aligned with the PRD and simplify future development with minimal maintenance costs.

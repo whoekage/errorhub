@@ -1,0 +1,36 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# API Package Guidelines
+
+The API package implements the ErrorHub REST API server using Fastify.
+
+## Structure
+
+- [packages/api/src/routes](mdc:packages/api/src/routes) - API route definitions
+- [packages/api/src/controllers](mdc:packages/api/src/controllers) - Request handlers
+- [packages/api/src/services](mdc:packages/api/src/services) - Business logic
+- [packages/api/src/middleware](mdc:packages/api/src/middleware) - Request/response middleware
+
+## REST API Design
+
+- Follow RESTful principles for route design
+- Use consistent URL patterns (e.g., `/api/errors/:code`)
+- Support proper HTTP methods and status codes
+- Implement proper validation for all endpoints
+
+## Error Responses
+
+- Always return error responses in a consistent format
+- Include error code, message, and HTTP status
+- Provide detailed validation errors when applicable
+- Log API errors with appropriate context
+
+## Performance
+
+- Implement caching for frequently accessed resources
+- Use efficient database queries
+- Monitor response times and optimize slow endpoints
+- Support pagination for list endpoints

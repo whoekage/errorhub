@@ -1,0 +1,25 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# ErrorHub Project Overview
+
+ErrorHub is a centralized error management system with message localization. The system allows developers to use error codes instead of text messages in code, while dynamically retrieving user-facing messages by code and required locale through API.
+
+## Project Structure
+
+This monorepo is organized using npm workspaces and includes the following packages:
+
+
+- [packages/sdk](mdc:packages/sdk) - SDK for working with the error API
+- [packages/api](mdc:packages/api) - REST API server
+- [packages/admin-ui](mdc:packages/admin-ui) - administrative interface
+- [packages/shared-ui](mdc:packages/shared-ui) - shared UI components
+
+## Code Style Guidelines
+
+- Only write comments in English
+- Use consistent naming conventions
+- Follow TypeScript best practices
+- Use Prettier and ESLint for code formatting and linting

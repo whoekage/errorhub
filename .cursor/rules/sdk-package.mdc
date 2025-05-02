@@ -1,0 +1,28 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# SDK Package Guidelines
+
+The SDK package provides client libraries for integrating with the ErrorHub API.
+
+## Structure
+
+- [packages/sdk/core](mdc:packages/sdk/core) - Core functionality and interfaces
+- [packages/sdk/browser](mdc:packages/sdk/browser) - Browser-specific implementation
+- [packages/sdk/node](mdc:packages/sdk/node) - Node.js implementation with Fastify plugin
+
+## API Design
+
+- Keep the public API simple and intuitive
+- Provide type definitions for all public methods
+- Follow Promise-based design for asynchronous operations
+- Support caching mechanisms for error messages
+
+## Error Handling
+
+- Handle network errors gracefully
+- Provide fallback mechanisms for offline scenarios
+- Log appropriate diagnostic information
+- Use TypeScript discriminated unions for error types

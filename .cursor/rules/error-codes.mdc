@@ -1,0 +1,33 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Error Code Guidelines
+
+## Naming Convention
+
+- Use uppercase for error codes
+- Use dot notation to create hierarchy (e.g., `USER.NOT_FOUND`)
+- Follow the pattern: `DOMAIN.ENTITY.ACTION_RESULT`
+- Keep error codes concise but descriptive
+
+## Structure
+
+Error codes should follow a hierarchical structure:
+- First level: Domain/Module (e.g., `AUTH`, `PAYMENT`, `USER`)
+- Second level: Entity/Resource (e.g., `AUTH.SESSION`, `PAYMENT.CARD`)
+- Third level: Specific error (e.g., `AUTH.SESSION.EXPIRED`, `PAYMENT.CARD.DECLINED`)
+
+## Usage in Code
+
+- Always use constants for error codes, never hardcode string literals
+- Import error codes from a central location
+- Include error codes in logs for easier debugging
+- When throwing errors, always use the appropriate error code
+
+## Documentation
+
+- All error codes must be documented in the central error catalog
+- Include description, severity level, and recommended actions
+- Document any parameters that might be used in error messages
