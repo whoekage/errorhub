@@ -6,16 +6,16 @@ export class ErrorCategoryEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ unique: true })
+  @Column({ unique: true, nullable: false, length: 255, type: 'varchar' })
   name: string;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true, length: 255, type: 'varchar' })
   description: string;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ nullable: false })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ nullable: false })
   updatedAt: Date;
 
   @OneToMany(() => ErrorCodeEntity, errorCode => errorCode.category)

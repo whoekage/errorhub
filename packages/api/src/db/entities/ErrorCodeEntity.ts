@@ -7,24 +7,24 @@ export class ErrorCodeEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ unique: true })
+  @Column({ unique: true, nullable: false, length: 255, type: 'varchar' })
   @Index()
   code: string;
 
-  @ManyToOne(() => ErrorCategoryEntity, category => category.errorCodes)
-  @JoinColumn({ name: 'categoryId' })
-  category: ErrorCategoryEntity;
+  @ManyToOne(() => ErrorCategoryEntity, category => category.errorCodes, { nullable: true })
+  @JoinColumn({ name: 'categoryId', referencedColumnName: 'id' })
+  category: ErrorCategoryEntity | null;
 
-  @Column()
-  categoryId: number;
+  @Column({ nullable: true, type: 'int' })
+  categoryId: number | null;
 
-  @Column({ type: 'text' })
+  @Column({ type: 'text', nullable: false })
   defaultMessage: string;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ nullable: false })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ nullable: false })
   updatedAt: Date;
 
   @OneToMany(() => ErrorTranslationEntity, translation => translation.errorCode)

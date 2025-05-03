@@ -1,7 +1,8 @@
-import { ErrorCodeRepository } from '../db/repositories/ErrorCodeRepository';
-import { ErrorCategoryRepository } from '../db/repositories/ErrorCategoryRepository';
-import { CreateErrorCodeDto, UpdateErrorCodeDto } from '../dto/error-code.dto';
-import { ErrorCodeEntity } from '../db/entities/ErrorCodeEntity';
+import { ErrorCodeRepository } from '@/db/repositories/ErrorCodeRepository';
+import { ErrorCategoryRepository } from '@/db/repositories/ErrorCategoryRepository';
+import { ErrorCodeEntity } from '@/db/entities/ErrorCodeEntity';
+import { z } from 'zod';
+import { createErrorCodeRequest, updateErrorCodeRequest } from '@/dto/index';
 
 /**
  * Service for managing error codes
@@ -14,30 +15,27 @@ export class ErrorService {
 
   /**
    * Get all error codes
+   * @param options Optional find options
    */
-  async getAllErrors(options = {}): Promise<ErrorCodeEntity[]> {
+  async getAllErrors(options: object = {}): Promise<ErrorCodeEntity[]> {
     return this.errorCodeRepository.findAll(options);
   }
 
   /**
-   * Get error by code
-   * @param code Error code
-   * @param lang Optional language for translation
+   * Get error code by its code
+   * @param code The error code
+   * @param options Optional find options
    */
-  async getErrorByCode(code: string, lang?: string): Promise<ErrorCodeEntity | null> {
-    const options = lang ? {
-      relations: ['translations']
-    } : {};
-    
+  async getErrorByCode(code: string, options: object = {}): Promise<ErrorCodeEntity | null> {
     return this.errorCodeRepository.findByCode(code, options);
   }
 
   /**
    * Create a new error code
-   * @param data Error code data
+   * @param data Error code data (categoryId is optional)
    */
-  async createError(data: CreateErrorCodeDto): Promise<ErrorCodeEntity> {
-    // Check if category exists
+  async createError(data: z.infer<typeof createErrorCodeRequest>): Promise<ErrorCodeEntity> {
+    // Check if category exists (if categoryId is provided)
     if (data.categoryId) {
       const category = await this.errorCategoryRepository.findById(data.categoryId);
       if (!category) {
@@ -51,9 +49,9 @@ export class ErrorService {
   /**
    * Update an existing error
    * @param code Error code to update
-   * @param data Updated data
+   * @param data Updated data (categoryId is optional)
    */
-  async updateError(code: string, data: UpdateErrorCodeDto): Promise<ErrorCodeEntity | null> {
+  async updateError(code: string, data: z.infer<typeof updateErrorCodeRequest>): Promise<ErrorCodeEntity | null> {
     // Check if category exists if it's being updated
     if (data.categoryId) {
       const category = await this.errorCategoryRepository.findById(data.categoryId);
@@ -67,7 +65,7 @@ export class ErrorService {
 
   /**
    * Delete an error code
-   * @param code Error code to delete
+   * @param code The error code to delete
    */
   async deleteError(code: string): Promise<boolean> {
     return this.errorCodeRepository.delete(code);

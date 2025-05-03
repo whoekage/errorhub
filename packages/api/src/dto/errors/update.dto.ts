@@ -10,7 +10,8 @@ export const updateErrorCodeRequest = errorCodeBaseSchema
   .extend({
     categoryId: z.number()
       .int('Category ID must be an integer')
-      .positive('Category ID must be a positive integer'),
+      .positive('Category ID must be a positive integer')
+      .nullable(),
   })
   .partial();
 

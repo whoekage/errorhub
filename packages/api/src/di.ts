@@ -48,6 +48,7 @@ export function createContainer(): DIContainer {
   // Repository initialization with injected DataSource using the factory
   const repositories = {
     errorCode: RepositoryFactory.createErrorCodeRepository(db),
+    errorCategory: RepositoryFactory.createErrorCategoryRepository(db),
     // Add others as you implement them
     // errorCategory: new ErrorCategoryRepository(db),
     // errorTranslation: new ErrorTranslationRepository(db),

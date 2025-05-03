@@ -24,7 +24,7 @@ const translationResponseSchema = z.object({
  */
 export const errorCodeResponseSchema = errorCodeBaseSchema.extend({
   id: z.number().int().positive(),
-  categoryId: z.number().int().positive(),
+  categoryId: z.number().int().positive().nullable(),
   createdAt: z.string().or(z.date()),
   updatedAt: z.string().or(z.date()),
   // Optional related entities

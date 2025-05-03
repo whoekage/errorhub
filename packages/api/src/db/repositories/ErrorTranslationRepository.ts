@@ -1,21 +1,29 @@
-import { Repository, FindOptionsWhere } from 'typeorm';
-import { ErrorTranslationEntity } from '../entities/ErrorTranslationEntity';
-import { AppDataSource } from '../data-source';
-import { CreateErrorTranslationDto, UpdateErrorTranslationDto } from '../../dto/error-translation.dto';
-import { ErrorCodeEntity } from '../entities/ErrorCodeEntity';
+import { Repository, FindOptionsWhere, DataSource, FindManyOptions, FindOneOptions, EntityManager } from 'typeorm';
+import { ErrorTranslationEntity } from '@/db/entities/ErrorTranslationEntity';
+import { ErrorCodeEntity } from '@/db/entities/ErrorCodeEntity';
 
-export class ErrorTranslationRepository {
+export interface IErrorTranslationRepository {
+  findAll(options?: FindManyOptions<ErrorTranslationEntity>): Promise<ErrorTranslationEntity[]>;
+  findByErrorCode(errorCode: string, options?: FindManyOptions<ErrorTranslationEntity>): Promise<ErrorTranslationEntity[]>;
+  findByErrorCodeAndLanguage(errorCode: string, language: string, options?: FindOneOptions<ErrorTranslationEntity>): Promise<ErrorTranslationEntity | null>;
+  create(data: Partial<ErrorTranslationEntity>, errorCodeEntity: ErrorCodeEntity): Promise<ErrorTranslationEntity>;
+  update(id: number, data: Partial<ErrorTranslationEntity>): Promise<ErrorTranslationEntity | null>;
+  delete(id: number): Promise<boolean>;
+  deleteByErrorCode(errorCode: string): Promise<boolean>;
+}
+
+export class ErrorTranslationRepository implements IErrorTranslationRepository {
   private repository: Repository<ErrorTranslationEntity>;
 
-  constructor() {
-    this.repository = AppDataSource.getRepository(ErrorTranslationEntity);
+  constructor(private dataSource: DataSource) {
+    this.repository = dataSource.getRepository(ErrorTranslationEntity);
   }
 
   /**
    * Find all translations
    * @param options Optional find options
    */
-  async findAll(options: object = {}): Promise<ErrorTranslationEntity[]> {
+  async findAll(options: FindManyOptions<ErrorTranslationEntity> = {}): Promise<ErrorTranslationEntity[]> {
     return this.repository.find(options);
   }
 
@@ -24,7 +32,7 @@ export class ErrorTranslationRepository {
    * @param errorCode The error code
    * @param options Optional find options
    */
-  async findByErrorCode(errorCode: string, options: object = {}): Promise<ErrorTranslationEntity[]> {
+  async findByErrorCode(errorCode: string, options: FindManyOptions<ErrorTranslationEntity> = {}): Promise<ErrorTranslationEntity[]> {
     return this.repository.find({
       where: { errorCode: { code: errorCode } } as FindOptionsWhere<ErrorTranslationEntity>,
       ...options,
@@ -40,7 +48,7 @@ export class ErrorTranslationRepository {
   async findByErrorCodeAndLanguage(
     errorCode: string,
     language: string,
-    options: object = {}
+    options: FindOneOptions<ErrorTranslationEntity> = {}
   ): Promise<ErrorTranslationEntity | null> {
     return this.repository.findOne({
       where: { 
@@ -53,17 +61,15 @@ export class ErrorTranslationRepository {
 
   /**
    * Create a new translation
-   * @param data Translation data with errorCode as string
+   * @param data Translation data
    * @param errorCodeEntity The associated error code entity
    */
   async create(
-    data: CreateErrorTranslationDto, 
+    data: Partial<ErrorTranslationEntity>, 
     errorCodeEntity: ErrorCodeEntity
   ): Promise<ErrorTranslationEntity> {
-    const { errorCode, ...translationData } = data;
-    
     const translation = this.repository.create({
-      ...translationData,
+      ...data,
       errorCode: errorCodeEntity
     });
     
@@ -75,17 +81,20 @@ export class ErrorTranslationRepository {
    * @param id The translation id
    * @param data Updated translation data
    */
-  async update(id: number, data: UpdateErrorTranslationDto): Promise<ErrorTranslationEntity | null> {
-    const translation = await this.repository.findOne({ 
-      where: { id } as FindOptionsWhere<ErrorTranslationEntity> 
+  async update(id: number, data: Partial<ErrorTranslationEntity>): Promise<ErrorTranslationEntity | null> {
+    return this.dataSource.transaction(async (entityManager: EntityManager) => {
+      const translation = await entityManager.findOne(ErrorTranslationEntity, { 
+        where: { id } as FindOptionsWhere<ErrorTranslationEntity> 
+      });
+      
+      if (!translation) {
+        return null; // Transaction will be rolled back if translation is null
+      }
+      
+      // Update the translation with the new data
+      Object.assign(translation, data);
+      return entityManager.save(ErrorTranslationEntity, translation);
     });
-    
-    if (!translation) {
-      return null;
-    }
-    
-    Object.assign(translation, data);
-    return this.repository.save(translation);
   }
 
   /**
@@ -93,7 +102,12 @@ export class ErrorTranslationRepository {
    * @param id The translation id
    */
   async delete(id: number): Promise<boolean> {
-    const result = await this.repository.delete(id);
+    const result = await this.dataSource.transaction(async (entityManager: EntityManager) => {
+      return entityManager.delete(ErrorTranslationEntity, { 
+        id 
+      } as FindOptionsWhere<ErrorTranslationEntity>);
+    });
+    
     return result.affected !== null && result.affected !== undefined && result.affected > 0;
   }
 
@@ -102,9 +116,11 @@ export class ErrorTranslationRepository {
    * @param errorCode The error code
    */
   async deleteByErrorCode(errorCode: string): Promise<boolean> {
-    const result = await this.repository.delete({ 
-      errorCode: { code: errorCode } 
-    } as FindOptionsWhere<ErrorTranslationEntity>);
+    const result = await this.dataSource.transaction(async (entityManager: EntityManager) => {
+      return entityManager.delete(ErrorTranslationEntity, { 
+        errorCode: { code: errorCode } 
+      } as FindOptionsWhere<ErrorTranslationEntity>);
+    });
     
     return result.affected !== null && result.affected !== undefined && result.affected > 0;
   }

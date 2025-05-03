@@ -7,7 +7,9 @@ import { errorCodeBaseSchema } from './base.dto';
 export const createErrorCodeRequest = errorCodeBaseSchema.extend({
   categoryId: z.number()
     .int('Category ID must be an integer')
-    .positive('Category ID must be a positive integer'),
+    .positive('Category ID must be a positive integer')
+    .nullable()
+    .optional(),
 });
 
 /**
@@ -32,7 +34,7 @@ const translationResponse = z.object({
  */
 export const createErrorCodeResponse = errorCodeBaseSchema.extend({
   id: z.number().int().positive(),
-  categoryId: z.number().int().positive(),
+  categoryId: z.number().int().positive().nullable(),
   createdAt: z.string().or(z.date()),
   updatedAt: z.string().or(z.date()),
   // Optional related entities

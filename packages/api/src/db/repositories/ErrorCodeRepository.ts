@@ -1,20 +1,19 @@
-import { Repository, FindOptionsWhere, DataSource } from 'typeorm';
-import { ErrorCodeEntity } from '../entities/ErrorCodeEntity';
-import { CreateErrorCodeDto, UpdateErrorCodeDto } from '../../dto/error-code.dto';
+import { Repository, FindOptionsWhere, DataSource, FindManyOptions, FindOneOptions, EntityManager } from 'typeorm';
+import { ErrorCodeEntity } from '@/db/entities/ErrorCodeEntity';
 
 export interface IErrorCodeRepository {
-  findAll(options?: object): Promise<ErrorCodeEntity[]>;
-  findByCode(code: string, options?: object): Promise<ErrorCodeEntity | null>;
-  findByCategoryId(categoryId: number, options?: object): Promise<ErrorCodeEntity[]>;
-  create(data: CreateErrorCodeDto): Promise<ErrorCodeEntity>;
-  update(code: string, data: UpdateErrorCodeDto): Promise<ErrorCodeEntity | null>;
+  findAll(options?: FindManyOptions<ErrorCodeEntity>): Promise<ErrorCodeEntity[]>;
+  findByCode(code: string, options?: FindOneOptions<ErrorCodeEntity>): Promise<ErrorCodeEntity | null>;
+  findByCategoryId(categoryId: number, options?: FindManyOptions<ErrorCodeEntity>): Promise<ErrorCodeEntity[]>;
+  create(data: Partial<ErrorCodeEntity>): Promise<ErrorCodeEntity>;
+  update(code: string, data: Partial<ErrorCodeEntity>): Promise<ErrorCodeEntity | null>;
   delete(code: string): Promise<boolean>;
 }
 
 export class ErrorCodeRepository implements IErrorCodeRepository {
   private repository: Repository<ErrorCodeEntity>;
 
-  constructor(dataSource: DataSource) {
+  constructor(private dataSource: DataSource) {
     this.repository = dataSource.getRepository(ErrorCodeEntity);
   }
 
@@ -22,7 +21,7 @@ export class ErrorCodeRepository implements IErrorCodeRepository {
    * Find all error codes
    * @param options Optional find options
    */
-  async findAll(options: object = {}): Promise<ErrorCodeEntity[]> {
+  async findAll(options: FindManyOptions<ErrorCodeEntity> = {}): Promise<ErrorCodeEntity[]> {
     return this.repository.find(options);
   }
 
@@ -31,7 +30,7 @@ export class ErrorCodeRepository implements IErrorCodeRepository {
    * @param code The error code
    * @param options Optional find options
    */
-  async findByCode(code: string, options: object = {}): Promise<ErrorCodeEntity | null> {
+  async findByCode(code: string, options: FindOneOptions<ErrorCodeEntity> = {}): Promise<ErrorCodeEntity | null> {
     return this.repository.findOne({
       where: { code } as FindOptionsWhere<ErrorCodeEntity>,
       ...options,
@@ -43,7 +42,7 @@ export class ErrorCodeRepository implements IErrorCodeRepository {
    * @param categoryId The category ID
    * @param options Optional find options
    */
-  async findByCategoryId(categoryId: number, options: object = {}): Promise<ErrorCodeEntity[]> {
+  async findByCategoryId(categoryId: number, options: FindManyOptions<ErrorCodeEntity> = {}): Promise<ErrorCodeEntity[]> {
     return this.repository.find({
       where: { categoryId } as FindOptionsWhere<ErrorCodeEntity>,
       ...options,
@@ -52,35 +51,46 @@ export class ErrorCodeRepository implements IErrorCodeRepository {
 
   /**
    * Create a new error code
-   * @param data Error code data
+   * @param data Error code data (categoryId is optional)
    */
-  async create(data: CreateErrorCodeDto): Promise<ErrorCodeEntity> {
-    const errorCode = this.repository.create(data as Partial<ErrorCodeEntity>);
+  async create(data: Partial<ErrorCodeEntity>): Promise<ErrorCodeEntity> {
+    const errorCode = this.repository.create(data);
     return this.repository.save(errorCode);
   }
 
   /**
    * Update an existing error code
    * @param code The error code to update
-   * @param data Updated error code data
+   * @param data Updated error code data (categoryId is optional)
    */
-  async update(code: string, data: UpdateErrorCodeDto): Promise<ErrorCodeEntity | null> {
-    const errorCode = await this.findByCode(code);
+  async update(code: string, data: Partial<ErrorCodeEntity>): Promise<ErrorCodeEntity | null> {
     
-    if (!errorCode) {
-      return null;
-    }
-    
-    Object.assign(errorCode, data);
-    return this.repository.save(errorCode);
+    return this.dataSource.transaction(async (entityManager: EntityManager) => {
+      const errorCode = await entityManager.findOne(ErrorCodeEntity, {
+        where: { code } as FindOptionsWhere<ErrorCodeEntity>,
+      });
+
+      if (!errorCode) {
+        return null; // Transaction will be rolled back if errorCode is null
+      }
+
+      // Update the error code with the new data
+      Object.assign(errorCode, data);
+      return entityManager.save(ErrorCodeEntity, errorCode);
+    });
   }
 
   /**
-   * Delete an error code
-   * @param code The code to delete
+   * Delete an error code by its code
+   * @param code The error code to delete
    */
   async delete(code: string): Promise<boolean> {
-    const result = await this.repository.delete({ code } as FindOptionsWhere<ErrorCodeEntity>);
+    const result = await this.dataSource.transaction(async (entityManager: EntityManager) => {
+      return entityManager.delete(ErrorCodeEntity, { 
+        code 
+      } as FindOptionsWhere<ErrorCodeEntity>);
+    });
+    
     return result.affected !== null && result.affected !== undefined && result.affected > 0;
   }
 } 

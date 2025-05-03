@@ -1,14 +1,52 @@
 import { FastifyInstance } from 'fastify';
 import { DIContainer } from '../../di';
+import { z } from 'zod';
+import { FindManyOptions } from 'typeorm';
+import { ErrorCodeEntity } from '@/db/entities/ErrorCodeEntity';
+
+// Query validation schema
+const querySchema = z.object({
+  include: z.string().optional()
+});
+
+type Query = z.infer<typeof querySchema>;
 
 /**
  * Route handler for getting all errors
  */
-export default function(fastify: FastifyInstance, { services }: DIContainer) {
-  fastify.get(
+export default function(fastify: FastifyInstance, { repositories }: DIContainer) {
+  fastify.get<{
+    Querystring: Query;
+  }>(
     '/',
-    async () => {
-      return services.error.getAllErrors();
+    async (request, reply) => {
+      try {
+        // Validate query parameters
+        const query = querySchema.parse(request.query);
+        
+        // Process include parameter
+        const options: FindManyOptions<ErrorCodeEntity> = {};
+        if (query.include) {
+          const relationItems = query.include.split(',');
+          if (relationItems.includes('translations')) {
+            options.relations = {
+              translations: true
+            };
+          }
+        }
+        
+        return repositories.errorCode.findAll(options);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return reply.code(400).send({
+            statusCode: 400,
+            error: 'Validation Error',
+            message: error.errors[0].message,
+            errors: error.errors
+          });
+        }
+        throw error;
+      }
     }
   );
 } 
