@@ -1,11 +1,10 @@
 import { FastifyInstance } from 'fastify';
-import { DIContainer } from '../../di';
+import { DIContainer } from '@/di';
 
 // Import route handlers (to be created later)
 import getById from './get-by-id';
 import getAll from './get-all';
-import create from './create';
-import update from './update';
+import upsert from './upsert';
 import deleteCategory from './delete';
 
 /**
@@ -18,11 +17,9 @@ export default function (fastify: FastifyInstance, di: DIContainer) {
   // Get all categories
   getAll(fastify, di);
   
-  // Create new category
-  create(fastify, di);
   
   // Update category
-  update(fastify, di);
+  upsert(fastify, di);
   
   // Delete category
   deleteCategory(fastify, di);

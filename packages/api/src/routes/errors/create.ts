@@ -6,7 +6,7 @@ import { createErrorCodeRequest } from '@/dto/errors';
 /**
  * Route handler for creating a new error code
  */
-export default function(fastify: FastifyInstance, { repositories }: DIContainer) {
+export default function(fastify: FastifyInstance, { services }: DIContainer) {
   fastify.post<{
     Body: z.infer<typeof createErrorCodeRequest>;
   }>(
@@ -17,7 +17,7 @@ export default function(fastify: FastifyInstance, { repositories }: DIContainer)
         const validatedData = createErrorCodeRequest.parse(request.body);
         console.log({validatedData});
         // Check for duplicate code
-        const existingError = await repositories.errorCode.findByCode(validatedData.code);
+        const existingError = await services.error.getErrorByCode(validatedData.code);
         if (existingError) {
           return reply.code(409).send({
             error: 'Conflict',

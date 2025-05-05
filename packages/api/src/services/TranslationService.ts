@@ -19,7 +19,9 @@ export class TranslationService {
   /**
    * Create or update a translation
    */
-
+  async getAllTranslations(options?: FindManyOptions<ErrorTranslationEntity>): Promise<ErrorTranslationEntity[]> {
+    return this.translationRepository.find(options);
+  }
   async upsert(data: UpsertTranslationRequest): Promise<UpsertTranslationResponse> {
     return this.dataSource.transaction(async () => {
       

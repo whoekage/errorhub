@@ -1,5 +1,5 @@
 import { ErrorTranslationEntity, ErrorCodeEntity, ErrorCategoryEntity } from '@/db';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, Repository, FindManyOptions } from 'typeorm';
 
 /**
  * Service for managing error categories
@@ -19,8 +19,9 @@ export class CategoryService {
   /**
    * Get all categories
    */
-  async getAllCategories(): Promise<ErrorCategoryEntity[]> {
-    return this.categoryRepository.find();
+    async getAllCategories(options?: FindManyOptions<ErrorCategoryEntity>): Promise<ErrorCategoryEntity[]> {
+      console.log({ options });
+      return this.categoryRepository.find(options);
   }
 
   /**
@@ -35,9 +36,17 @@ export class CategoryService {
    * Create a new category
    * @param data Category data
    */
-  async createCategory(data: { name: string; description?: string }): Promise<ErrorCategoryEntity> {
-    const category = this.categoryRepository.create(data);
-    return await this.categoryRepository.save(category);
+  async upsertCategory(data: { name: string; description?: string }): Promise<ErrorCategoryEntity> {
+    return this.dataSource.transaction(async () => {
+      const existingCategory = await this.categoryRepository.findOne({ where: { name: data.name } });
+      console.log({existingCategory});
+      if (existingCategory) {
+        const updatedCategory = this.categoryRepository.merge(existingCategory, data);
+        return await this.categoryRepository.save(updatedCategory);
+      }
+      const category = this.categoryRepository.create(data);
+      return await this.categoryRepository.save(category);
+    });
   }
 
   /**
@@ -58,7 +67,12 @@ export class CategoryService {
    * @param id Category ID
    */
   async deleteCategory(id: number): Promise<boolean> {
-    const result = await this.categoryRepository.delete(id);
-    return result.affected !== 0 && result.raw.affectedRows > 0;
+    return this.dataSource.transaction(async () => {
+      // 1. Make all error codes categories null
+      await this.errorCodeRepository.update({ categoryId: id }, { categoryId: null });
+      // 2. Delete the category
+      const result = await this.categoryRepository.delete(id);
+      return result.affected !== 0 && result.raw.affectedRows > 0;
+    });
   }
 } 

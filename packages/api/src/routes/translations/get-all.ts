@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { FindManyOptions } from 'typeorm';
-import { ErrorCodeEntity } from '@/db/entities/ErrorCodeEntity';
+import { ErrorTranslationEntity } from '@/db/entities/ErrorTranslationEntity';
 import { DIContainer } from '@/di';
 // Query validation schema
 const querySchema = z.object({
@@ -21,13 +21,20 @@ export default function(fastify: FastifyInstance, { services }: DIContainer) {
     async (request, reply) => {
       try {
         // Validate query parameters
-        console.log({ query: request.query });
-        const options = querySchema.parse(request.query);
+        const query = querySchema.parse(request.query);
         
         // Process include parameter
-       
+        const options: FindManyOptions<ErrorTranslationEntity> = {};
+        if (query.include) {
+          const relationItems = query.include.split(',');
+          if (relationItems.includes('errorCode')) {
+            options.relations = {
+              errorCode: true
+            };
+          }
+        }
         
-        return services.error.getAllErrors(options);
+        return services.error.getAllTranslations(options);
       } catch (error) {
         if (error instanceof z.ZodError) {
           return reply.code(400).send({

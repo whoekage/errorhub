@@ -4,13 +4,7 @@ import { errorCodeBaseSchema } from './base.dto';
 /**
  * Schema for creating a new error code (request)
  */
-export const createErrorCodeRequest = errorCodeBaseSchema.extend({
-  categoryId: z.number()
-    .int('Category ID must be an integer')
-    .positive('Category ID must be a positive integer')
-    .nullable()
-    .optional(),
-});
+
 
 /**
  * Base response schema for a category
@@ -42,7 +36,7 @@ export const createErrorCodeResponse = errorCodeBaseSchema.extend({
   translations: z.array(translationResponse).optional(),
 });
 
-// Backward compatibility
-export const createErrorCodeSchema = createErrorCodeRequest;
+
+export const createErrorCodeRequest = errorCodeBaseSchema
 export const createErrorCodeRequestSchema = createErrorCodeRequest;
 export const createErrorCodeResponseSchema = createErrorCodeResponse; 

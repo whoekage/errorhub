@@ -27,7 +27,7 @@ export default function(fastify: FastifyInstance, { services }: DIContainer) {
         const params = paramsSchema.parse(request.params);
         
         const deleted = await services.category.deleteCategory(params.id);
-        
+        console.log({deleted});
         if (!deleted) {
           return reply.code(404).send({
             statusCode: 404,
