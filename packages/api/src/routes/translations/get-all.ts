@@ -1,50 +1,55 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { FindManyOptions } from 'typeorm';
-import { ErrorTranslationEntity } from '@/db/entities/ErrorTranslationEntity';
 import { DIContainer } from '@/di';
-// Query validation schema
-const querySchema = z.object({
-  include: z.string().optional()
-});
-
-type Query = z.infer<typeof querySchema>;
+import { paginationSchema, PaginatedResponse } from '@/dto/common/pagination.dto';
+import { ErrorTranslationEntity } from '@/db'; // Import entity for response type
 
 /**
- * Route handler for getting all errors
+ * Route handler for getting all translations with pagination, sorting, filtering.
  */
 export default function(fastify: FastifyInstance, { services }: DIContainer) {
   fastify.get<{
-    Querystring: Query;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    Querystring: Record<string, any>; // Allow arbitrary filters
+    Reply: PaginatedResponse<ErrorTranslationEntity> | { error: string; message: string; statusCode: number };
   }>(
     '/',
-    async (request, reply) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    async (request: FastifyRequest<{ Querystring: Record<string, any> }>, reply: FastifyReply) => {
       try {
-        // Validate query parameters
-        const query = querySchema.parse(request.query);
+        // Basic validation of standard query parameters
+        paginationSchema.parse(request.query);
+
+        // Construct base URL for HATEOAS links
+        const baseUrl = `${request.protocol}://${request.hostname}${request.routeOptions.url}`;
         
-        // Process include parameter
-        const options: FindManyOptions<ErrorTranslationEntity> = {};
-        if (query.include) {
-          const relationItems = query.include.split(',');
-          if (relationItems.includes('errorCode')) {
-            options.relations = {
-              errorCode: true
-            };
-          }
-        }
+        // Call the standardized service method
+        // Assuming translation service is available under services.translation
+        const result = await services.translation.getAll(request.query, baseUrl);
         
-        return services.error.getAllTranslations(options);
+        return reply.send(result);
+
       } catch (error) {
+        fastify.log.error(error, 'Error fetching translations list');
         if (error instanceof z.ZodError) {
           return reply.code(400).send({
             statusCode: 400,
             error: 'Validation Error',
-            message: error.errors[0].message,
-            errors: error.errors
+            message: `Invalid query parameters: ${error.errors.map(e => e.message).join(', ')}`,
           });
         }
-        throw error;
+        if (error instanceof Error) {
+             return reply.code(400).send({
+                 statusCode: 400,
+                 error: 'Bad Request',
+                 message: error.message 
+             });
+        }
+        return reply.code(500).send({
+          statusCode: 500,
+          error: 'Internal Server Error',
+          message: 'An unexpected error occurred while fetching translations.'
+        });
       }
     }
   );
