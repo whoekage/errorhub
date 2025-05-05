@@ -1,9 +1,9 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany, Index, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany, Index, ManyToOne, JoinColumn, BaseEntity } from 'typeorm';
 import { ErrorTranslationEntity } from './ErrorTranslationEntity';
 import { ErrorCategoryEntity } from './ErrorCategoryEntity';
 
 @Entity('error_codes')
-export class ErrorCodeEntity {
+export class ErrorCodeEntity extends BaseEntity {
   @PrimaryGeneratedColumn()
   id: number;
 

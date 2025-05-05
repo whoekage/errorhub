@@ -15,7 +15,7 @@ export default function(fastify: FastifyInstance, { repositories }: DIContainer)
       try {
         // Validate request body
         const validatedData = createErrorCodeRequest.parse(request.body);
-        
+        console.log({validatedData});
         // Check for duplicate code
         const existingError = await repositories.errorCode.findByCode(validatedData.code);
         if (existingError) {

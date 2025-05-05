@@ -10,7 +10,7 @@ export default fp(async (fastify) => {
   fastify.decorate('di', container);
   
   // Optional: register commonly used dependencies directly for convenience
-  fastify.decorate('errorCodeRepository', container.repositories.errorCode);
+  // fastify.decorate('errorCodeRepository', container.repositories.errorCode);
   
   // Add more as needed when implementing services
   // fastify.decorate('errorService', container.services.error);

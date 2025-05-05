@@ -1,19 +1,26 @@
-import { ErrorCategoryRepository } from '../db/repositories/ErrorCategoryRepository';
-import { ErrorCategoryEntity } from '../db/entities/ErrorCategoryEntity';
+import { ErrorTranslationEntity, ErrorCodeEntity, ErrorCategoryEntity } from '@/db';
+import { DataSource, Repository } from 'typeorm';
 
 /**
  * Service for managing error categories
  */
 export class CategoryService {
+  private errorCodeRepository: Repository<ErrorCodeEntity>;
+  private translationRepository: Repository<ErrorTranslationEntity>;
+  private categoryRepository: Repository<ErrorCategoryEntity>;
   constructor(
-    private errorCategoryRepository: ErrorCategoryRepository
-  ) {}
+    private readonly dataSource: DataSource
+  ) {
+    this.errorCodeRepository = this.dataSource.getRepository(ErrorCodeEntity);
+    this.categoryRepository = this.dataSource.getRepository(ErrorCategoryEntity);
+    this.translationRepository = this.dataSource.getRepository(ErrorTranslationEntity);
+  }
 
   /**
    * Get all categories
    */
   async getAllCategories(): Promise<ErrorCategoryEntity[]> {
-    return this.errorCategoryRepository.findAll();
+    return this.categoryRepository.find();
   }
 
   /**
@@ -21,7 +28,7 @@ export class CategoryService {
    * @param id Category ID
    */
   async getCategoryById(id: number): Promise<ErrorCategoryEntity | null> {
-    return this.errorCategoryRepository.findById(id);
+    return this.categoryRepository.findOne({ where: { id } });
   }
 
   /**
@@ -29,7 +36,8 @@ export class CategoryService {
    * @param data Category data
    */
   async createCategory(data: { name: string; description?: string }): Promise<ErrorCategoryEntity> {
-    return this.errorCategoryRepository.create(data);
+    const category = this.categoryRepository.create(data);
+    return await this.categoryRepository.save(category);
   }
 
   /**
@@ -38,7 +46,11 @@ export class CategoryService {
    * @param data Updated data
    */
   async updateCategory(id: number, data: { name?: string; description?: string }): Promise<ErrorCategoryEntity | null> {
-    return this.errorCategoryRepository.update(id, data);
+    const category = await this.categoryRepository.findOne({ where: { id } });
+    if (!category) {
+      throw new Error('Category not found');
+    }
+    return await this.categoryRepository.save({ ...category, ...data });
   }
 
   /**
@@ -46,6 +58,7 @@ export class CategoryService {
    * @param id Category ID
    */
   async deleteCategory(id: number): Promise<boolean> {
-    return this.errorCategoryRepository.delete(id);
+    const result = await this.categoryRepository.delete(id);
+    return result.affected !== 0 && result.raw.affectedRows > 0;
   }
 } 

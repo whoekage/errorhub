@@ -1,9 +1,9 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, UpdateDateColumn, Unique } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, UpdateDateColumn, Unique, CreateDateColumn, BaseEntity } from 'typeorm';
 import { ErrorCodeEntity } from './ErrorCodeEntity';
 
 @Entity('error_translations')
 @Unique(['errorCode', 'language'])
-export class ErrorTranslationEntity {
+export class ErrorTranslationEntity extends BaseEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
@@ -12,6 +12,9 @@ export class ErrorTranslationEntity {
 
   @Column({ type: 'text' })
   message: string;
+
+  @CreateDateColumn()
+  createdAt: Date;
 
   @UpdateDateColumn()
   updatedAt: Date;

@@ -6,7 +6,7 @@ import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyRequestLogger from '@mgcrea/fastify-request-logger';
 import dotenv from 'dotenv';
 import { errorHandler } from './middleware/error-handler';
-import routes from './routes';
+import routes from './routes/index';
 import { initializeDatabase } from './db';
 import diPlugin from './plugins/di-plugin';
 

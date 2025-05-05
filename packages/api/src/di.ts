@@ -1,35 +1,21 @@
 import { DataSource } from 'typeorm';
 import { AppDataSource } from './db/data-source';
-import { RepositoryFactory, IErrorCodeRepository } from './db/repositories/index';
 
-// Import repository classes and interfaces
-// import { ErrorCategoryRepository, IErrorCategoryRepository } from './db/repositories/ErrorCategoryRepository';
-// import { ErrorTranslationRepository, IErrorTranslationRepository } from './db/repositories/ErrorTranslationRepository';
-
-// Import service classes and interfaces (to be created)
-// import { ErrorService, IErrorService } from './services/ErrorService';
-// import { CategoryService, ICategoryService } from './services/CategoryService';
-// import { TranslationService, ITranslationService } from './services/TranslationService';
+// Import service classes and interfaces
+import { TranslationService } from './services/TranslationService';
+import { CategoryService } from './services/CategoryService';
+import { ErrorService } from './services/ErrorService';
 
 // DI container type
 export interface DIContainer {
   // Database
   db: DataSource;
   
-  // Repositories
-  repositories: {
-    errorCode: IErrorCodeRepository;
-    // Add others as you implement them
-    // errorCategory: IErrorCategoryRepository;
-    // errorTranslation: IErrorTranslationRepository;
-  };
-  
   // Services
   services: {
-    // Add as you implement them
-    // error: IErrorService;
-    // category: ICategoryService;
-    // translation: ITranslationService;
+    translation: TranslationService;
+    category: CategoryService;
+    error: ErrorService;
   };
 }
 
@@ -46,26 +32,22 @@ export function createContainer(): DIContainer {
   const db = dataSource;
   
   // Repository initialization with injected DataSource using the factory
-  const repositories = {
-    errorCode: RepositoryFactory.createErrorCodeRepository(db),
-    errorCategory: RepositoryFactory.createErrorCategoryRepository(db),
-    // Add others as you implement them
-    // errorCategory: new ErrorCategoryRepository(db),
-    // errorTranslation: new ErrorTranslationRepository(db),
-  };
+  
   
   // Service initialization with injected repositories
+  const translationService = new TranslationService(db);
+  const categoryService = new CategoryService(db);
+  const errorService = new ErrorService(db);
+
   const services = {
-    // Add as you implement them
-    // error: new ErrorService(repositories.errorCode, repositories.errorCategory),
-    // category: new CategoryService(repositories.errorCategory),
-    // translation: new TranslationService(repositories.errorTranslation),
+    translation: translationService,
+    category: categoryService,
+    error: errorService,
   };
   
   // Return assembled container
   return {
     db,
-    repositories,
     services
   };
 }
