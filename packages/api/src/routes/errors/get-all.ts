@@ -1,9 +1,8 @@
 import { FastifyInstance } from 'fastify';
-import { DIContainer } from '../../di';
 import { z } from 'zod';
 import { FindManyOptions } from 'typeorm';
 import { ErrorCodeEntity } from '@/db/entities/ErrorCodeEntity';
-
+import { DIContainer } from '@/di';
 // Query validation schema
 const querySchema = z.object({
   include: z.string().optional()
@@ -14,7 +13,7 @@ type Query = z.infer<typeof querySchema>;
 /**
  * Route handler for getting all errors
  */
-export default function(fastify: FastifyInstance, { repositories }: DIContainer) {
+export default function(fastify: FastifyInstance, { services }: DIContainer) {
   fastify.get<{
     Querystring: Query;
   }>(
@@ -35,7 +34,7 @@ export default function(fastify: FastifyInstance, { repositories }: DIContainer)
           }
         }
         
-        return repositories.errorCode.findAll(options);
+        return services.error.getAllErrors(options);
       } catch (error) {
         if (error instanceof z.ZodError) {
           return reply.code(400).send({

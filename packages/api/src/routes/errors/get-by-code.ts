@@ -13,7 +13,7 @@ type Query = z.infer<typeof querySchema>;
 /**
  * Route handler for getting an error by code
  */
-export default function(fastify: FastifyInstance, { repositories }: DIContainer) {
+export default function(fastify: FastifyInstance, { services }: DIContainer) {
   fastify.get<{
     Params: z.infer<typeof errorCodeParamSchema>;
     Querystring: Query;
@@ -25,7 +25,7 @@ export default function(fastify: FastifyInstance, { repositories }: DIContainer)
         const params = errorCodeParamSchema.parse(request.params);
         const query = querySchema.parse(request.query);
         
-        const error = await repositories.errorCode.findByCode(params.code, { 
+        const error = await services.error.getErrorByCode(params.code, { 
           relations: query.lang ? ['translations'] : [] 
         });
         

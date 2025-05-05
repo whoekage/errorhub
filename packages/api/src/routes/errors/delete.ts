@@ -6,7 +6,7 @@ import { errorCodeParamSchema } from '@/dto/errors/params.dto';
 /**
  * Route handler for deleting an error code
  */
-export default function(fastify: FastifyInstance, { repositories }: DIContainer) {
+export default function(fastify: FastifyInstance, { services }: DIContainer) {
   fastify.delete<{
     Params: z.infer<typeof errorCodeParamSchema>;
   }>(
@@ -17,7 +17,7 @@ export default function(fastify: FastifyInstance, { repositories }: DIContainer)
         const params = errorCodeParamSchema.parse(request.params);
         
         // Check if error exists
-        const errorExists = await repositories.errorCode.findByCode(params.code);
+        const errorExists = await services.error.deleteError(params.code);
         if (!errorExists) {
           return reply.code(404).send({
             statusCode: 404,
@@ -25,9 +25,6 @@ export default function(fastify: FastifyInstance, { repositories }: DIContainer)
             message: `Error code ${params.code} not found`
           });
         }
-        
-        // Delete error
-        await repositories.errorCode.delete(params.code);
         
         return reply.code(204).send();
       } catch (error) {

@@ -1,7 +1,7 @@
 import { Logger } from 'pino';
 import { DataSource, Repository } from 'typeorm';
 import { ErrorTranslationEntity, ErrorCodeEntity, ErrorCategoryEntity } from '@/db';
-
+import pino from 'pino';
 
 
 /**
@@ -11,12 +11,16 @@ export class ErrorService {
   private errorCodeRepository: Repository<ErrorCodeEntity>;
   private errorCategoryRepository: Repository<ErrorCategoryEntity>;
   private errorTranslationRepository: Repository<ErrorTranslationEntity>;
+  private logger: Logger;
   constructor(
     private readonly dataSource: DataSource,
   ) {
     this.errorCodeRepository = this.dataSource.getRepository(ErrorCodeEntity);
     this.errorCategoryRepository = this.dataSource.getRepository(ErrorCategoryEntity);
     this.errorTranslationRepository = this.dataSource.getRepository(ErrorTranslationEntity);
+    this.logger = pino({
+      name: 'error-service'
+    });
   }
 
   /**
@@ -65,7 +69,7 @@ export class ErrorService {
       
       // Get results
       const [items, total] = await Promise.all([
-        this.errorCodeRepository.findAll(findOptions),
+        this.errorCodeRepository.find(findOptions),
         // Count query with the same filters but without pagination
         this.errorCodeRepository.count(findOptions)
       ]);
@@ -110,7 +114,12 @@ export class ErrorService {
         findOptions.relations.category = true;
       }
       
-      const errorCode = await this.errorCodeRepository.findByCode(code, findOptions);
+      const errorCode = await this.errorCodeRepository.findOne({
+        where: {
+          code
+        },
+        ...findOptions
+      });
       
       if (!errorCode) {
         return null;
@@ -127,7 +136,7 @@ export class ErrorService {
       return errorCode;
     } catch (error) {
       this.logger.error({ error, code }, 'Failed to get error code');
-      throw new ServiceError(`Failed to get error code: ${code}`, { cause: error });
+      throw new Error(`Failed to get error code: ${code}, error: ${error}`);
     }
   }
 
@@ -198,18 +207,22 @@ export class ErrorService {
    */
   async deleteError(code: string): Promise<boolean> {
     try {
-      return this.dataSource.transaction(async entityManager => {
+      return this.dataSource.transaction(async () => {
         // Check if error code exists
-        const existing = await this.errorCodeRepository.findByCode(code);
-        if (!existing) {
+        const existingCode = await this.errorCodeRepository.findOne({
+          where: {
+            code
+          }
+        });
+        if (!existingCode) {
           return false;
         }
 
         // Delete translations first (to maintain referential integrity)
-        await this.errorTranslationRepository.deleteByErrorCode(code);
+        await this.errorTranslationRepository.delete({ errorCode: { code } });
         
-        // Now delete the error code
-        return this.errorCodeRepository.delete(code);
+        return this.errorCodeRepository.delete(existingCode.id);
+       
       });
     } catch (error) {
       this.logger.error({ error, code }, 'Failed to delete error code');
