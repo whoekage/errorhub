@@ -2,6 +2,17 @@
 
 The REST API server for ErrorHub.
 
+## Architecture
+
+API is structured in the following layers:
+
+- **Routes**: Handle HTTP requests and responses
+- **Services**: Business logic and data access
+- **DTOs**: Data validation using Zod
+- **Entities**: Data models using TypeORM
+
+The main difference from traditional architecture is that the service layer works directly with TypeORM repositories, which simplifies the codebase and reduces the number of abstraction layers.
+
 ## Development
 
 ### Installation

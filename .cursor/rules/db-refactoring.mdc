@@ -75,3 +75,32 @@ alwaysApply: true
 - Repositories like [packages/api/src/db/repositories/ErrorTranslationRepository.ts](mdc:packages/api/src/db/repositories/ErrorTranslationRepository.ts) will have clearer responsibilities
 
 This refactoring will make the project architecture more aligned with the PRD and simplify future development with minimal maintenance costs.
+
+## New Architecture
+
+### Service Layer Works Directly with Repositories
+
+- Services use `dataSource.getRepository(Entity)` to access repositories
+- Repository initialization happens in the service constructor
+- Transactions are managed through dataSource
+
+### Advantages
+
+- Fewer levels of abstraction
+- Easier to maintain code
+- Easier to track business logic
+- More efficient use of TypeORM capabilities
+
+### Service Example
+
+```typescript
+export class ErrorService {
+  private errorRepository: Repository<ErrorCodeEntity>;
+  
+  constructor(private dataSource: DataSource) {
+    this.errorRepository = this.dataSource.getRepository(ErrorCodeEntity);
+  }
+  
+  // Service methods use this.errorRepository directly
+}
+```

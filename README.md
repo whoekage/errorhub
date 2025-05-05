@@ -174,8 +174,8 @@ The interface will be available at http://localhost:3000
 
 ErrorHub is built on the following principles:
 
-- **Separation of concerns** - each package has a clear role in the system
-- **API-first approach** - all interactions happen through the API
+- **Separation of concerns** - service layer contains business logic and data access
+- **API-first** - all interactions happen through API
 - **Multi-level caching** - for optimal performance
 - **Extensibility** - possibility to add new error types and integrations
 
@@ -203,9 +203,6 @@ errorHub/
 ├── packages/
 │   ├── sdk/
 │   │   ├── core/
-│   │   │   ├── client/
-│   │   │   │   ├── base-client.ts
-│   │   │   │   └── http-client.ts
 │   │   │   ├── types.ts
 │   │   │   └── index.ts
 │   │   ├── browser/
@@ -221,6 +218,9 @@ errorHub/
 │   │       │   ├── index.ts
 │   │       │   └── error-routes.ts
 │   │       ├── services/
+│   │       │   ├── ErrorService.ts
+│   │       │   ├── CategoryService.ts
+│   │       │   └── TranslationService.ts
 │   │       └── index.ts
 │   ├── admin-ui/
 │   └── shared-ui/

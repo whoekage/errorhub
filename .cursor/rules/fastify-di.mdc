@@ -18,31 +18,21 @@ The DI container should be organized in a separate `di.ts` file with step-by-ste
 import { DataSource } from 'typeorm';
 import { appDataSource } from './db/data-source';
 
-// Repository imports
-import { ErrorRepository } from './repositories/error-repository';
-import { CategoryRepository } from './repositories/category-repository';
-import { ErrorTranslationRepository } from './repositories/error-translation-repository';
-
 // Service imports
-import { ErrorService } from './services/error-service';
-import { CategoryService } from './services/category-service';
+import { ErrorService } from './services/ErrorService';
+import { CategoryService } from './services/CategoryService';
+import { TranslationService } from './services/TranslationService';
 
 // DI container type
 export interface DIContainer {
   // Database
   db: DataSource;
   
-  // Repositories
-  repositories: {
-    error: ErrorRepository;
-    category: CategoryRepository;
-    translation: ErrorTranslationRepository;
-  };
-  
   // Services
   services: {
     error: ErrorService;
     category: CategoryService;
+    translation: TranslationService;
   };
 }
 
@@ -53,29 +43,16 @@ export function createContainer(): DIContainer {
   // Database initialization
   const db = appDataSource;
   
-  // Repository initialization
-  const repositories = {
-    error: new ErrorRepository(db),
-    category: new CategoryRepository(db),
-    translation: new ErrorTranslationRepository(db)
-  };
-  
-  // Service initialization
+  // Service initialization with direct access to database
   const services = {
-    error: new ErrorService(
-      repositories.error,
-      repositories.category,
-      repositories.translation
-    ),
-    category: new CategoryService(
-      repositories.category
-    )
+    error: new ErrorService(db),
+    category: new CategoryService(db),
+    translation: new TranslationService(db)
   };
   
   // Return assembled container
   return {
     db,
-    repositories,
     services
   };
 }
@@ -100,6 +77,7 @@ export default fp(async (fastify) => {
   // Optional: register commonly used dependencies directly
   fastify.decorate('errorService', container.services.error);
   fastify.decorate('categoryService', container.services.category);
+  fastify.decorate('translationService', container.services.translation);
 });
 ```
 
@@ -271,6 +249,7 @@ declare module 'fastify' {
     // Optional, for convenience:
     errorService: DIContainer['services']['error'];
     categoryService: DIContainer['services']['category'];
+    translationService: DIContainer['services']['translation'];
   }
 }
 ```
@@ -311,6 +290,9 @@ export function createMockContainer(): DIContainer {
       getAllErrors: jest.fn()
     },
     category: {
+      // Method mocks...
+    },
+    translation: {
       // Method mocks...
     }
   };

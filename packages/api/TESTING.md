@@ -114,27 +114,24 @@ Create a test dependency injection container that uses the same real implementat
 ```typescript
 import { DIContainer } from '@/di';
 import { testDataSource } from '../setup';
-import { RepositoryFactory } from '@/db/repositories/index';
+import { ErrorService } from '@/services/ErrorService';
+import { CategoryService } from '@/services/CategoryService';
+import { TranslationService } from '@/services/TranslationService';
 
 export function createTestContainer(): DIContainer {
   // Use the test database connection
   const db = testDataSource;
   
-  // Repository initialization with injected test DataSource
-  const repositories = {
-    errorCode: RepositoryFactory.createErrorCodeRepository(db),
-    // Add other repositories as needed
-  };
-  
-  // Service initialization with real implementations
+  // Initialize services with test database
   const services = {
-    // Add services as needed
+    error: new ErrorService(db),
+    category: new CategoryService(db),
+    translation: new TranslationService(db)
   };
   
   // Return assembled container
   return {
     db,
-    repositories,
     services
   };
 }
