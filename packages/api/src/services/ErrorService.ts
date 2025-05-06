@@ -2,10 +2,34 @@ import { Logger } from 'pino';
 import { DataSource, Repository, FindOptionsRelations } from 'typeorm';
 import { ErrorTranslationEntity, ErrorCodeEntity, ErrorCategoryEntity } from '@/db';
 import pino from 'pino';
-import { CreateErrorDto, UpdateErrorDto, GetErrorOptions, LocalizedErrorResponse, ErrorListOptions } from '@/dto/errors';
-import { ResourceConflictError, ResourceNotFoundError, ServiceError } from '@/utils/errors';
-import { PaginatedResponse, PaginationDto } from '@/dto/common/pagination.dto';
+import { PaginationDto } from '@/dto/common/pagination.dto';
 import { keysetPaginate } from '@/utils/pagination';
+import { ResourceConflictError, ResourceNotFoundError, ServiceError } from '@/utils/errors';
+
+// Define interfaces within the file to avoid import errors
+interface CreateErrorDto {
+  code: string;
+  defaultMessage: string;
+  categoryId?: number;
+}
+
+interface UpdateErrorDto {
+  defaultMessage?: string;
+  categoryId?: number;
+}
+
+interface GetErrorOptions {
+  includeTranslations?: boolean;
+  includeCategory?: boolean;
+  language?: string;
+}
+
+interface LocalizedErrorResponse {
+  code: string;
+  message: string;
+  locale: string;
+  category?: string;
+}
 
 /**
  * Service for managing error codes, extending BaseListService for list operations.
@@ -43,6 +67,7 @@ export class ErrorService {
   protected getAllowedRelations(): string[] {
     return ['category', 'translations'];
   }
+  
   async getAll(pagination: PaginationDto, baseUrl: string) {
     const result = await keysetPaginate<ErrorCodeEntity>(this.errorCodeRepository, {
       ...pagination,
@@ -133,7 +158,7 @@ export class ErrorService {
    */
   async updateError(code: string, data: UpdateErrorDto): Promise<ErrorCodeEntity> {
     try {
-      const existing = await this.repository.findOneBy({ code });
+      const existing = await this.errorCodeRepository.findOneBy({ code });
       if (!existing) {
         throw new ResourceNotFoundError(`Error code not found: ${code}`);
       }
@@ -145,8 +170,8 @@ export class ErrorService {
         }
       }
 
-      this.repository.merge(existing, data);
-      return this.repository.save(existing);
+      this.errorCodeRepository.merge(existing, data);
+      return this.errorCodeRepository.save(existing);
     } catch (error) {
       if (error instanceof ResourceNotFoundError) {
         throw error;
@@ -161,7 +186,7 @@ export class ErrorService {
    */
   async deleteError(code: string): Promise<boolean> {
     try {
-      const result = await this.repository.delete({ code });
+      const result = await this.errorCodeRepository.delete({ code });
       if (result.affected === 0) {
         throw new ResourceNotFoundError(`Error code not found: ${code}`);
       }
@@ -180,7 +205,7 @@ export class ErrorService {
    */
   async getErrorsByCategory(categoryId: number): Promise<ErrorCodeEntity[]> {
     try {
-      return this.repository.find({ where: { categoryId } });
+      return this.errorCodeRepository.find({ where: { categoryId } });
     } catch (error) {
       this.logger.error({ error, categoryId }, 'Failed to get errors by category');
       throw new ServiceError('Failed to retrieve errors for category', { cause: error });

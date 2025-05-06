@@ -1,4 +1,4 @@
-import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { DIContainer } from '@/di';
 import { paginationSchema, PaginatedResponse } from '@/dto/common/pagination.dto';
@@ -9,22 +9,24 @@ export default function registerErrorRoutes(
   { services }: DIContainer
 ) {
   fastify.get<{
-    Querystring: Record<string, any>;
+    Querystring: Record<string, unknown>;
     Reply: PaginatedResponse<ErrorCodeEntity> | { error: string; message: string; statusCode: number };
   }>('/', async (request, reply) => {
     try {
       // ✅ Validate known pagination query params
       const pagination = paginationSchema.parse(request.query);
 
-      const baseUrl = `${request.protocol}://${request.headers.host}${request.routeOptions.url}`;
+      // Build the base URL **including** the full path (without query string) so that
+      // generated pagination links point back to the current endpoint (e.g. "/api/errors")
+      const currentPath = request.raw.url?.split('?')[0] ?? request.url.split('?')[0];
+      const baseUrl = `${request.protocol}://${request.headers.host}${currentPath}`;
 
       // 🚀 Call the service method
       const result = await services.error.getAll({ ...request.query, ...pagination }, baseUrl);
 
       return reply.send(result);
     } catch (error) {
-      fastify.log.error(error, 'Failed to fetch error codes');
-
+      // Handle validation errors locally but let other errors propagate to the global error handler
       if (error instanceof z.ZodError) {
         return reply.code(400).send({
           statusCode: 400,
@@ -33,11 +35,8 @@ export default function registerErrorRoutes(
         });
       }
 
-      return reply.code(500).send({
-        statusCode: 500,
-        error: 'Internal Server Error',
-        message: error instanceof Error ? error.message : 'Unknown error occurred',
-      });
+      // Re-throw non-validation errors so that the global error handler can process them
+      throw error;
     }
   });
 }

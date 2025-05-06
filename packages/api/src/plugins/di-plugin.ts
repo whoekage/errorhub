@@ -1,5 +1,5 @@
 import fp from 'fastify-plugin';
-import { container } from '../di';
+import { container } from '@/di';
 
 /**
  * Fastify plugin that registers the DI container as a decorator,

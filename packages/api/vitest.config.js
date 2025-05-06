@@ -4,6 +4,7 @@ const { defineConfig } = require('vitest/config');
 module.exports = defineConfig({
   test: {
     environment: 'node',
+    silent: false,
     globals: true,
     testTimeout: 10000, // 10 seconds for API tests
     setupFiles: ['src/tests/setup.ts'],
