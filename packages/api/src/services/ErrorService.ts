@@ -2,20 +2,24 @@ import { Logger } from 'pino';
 import { DataSource, Repository, FindOptionsRelations } from 'typeorm';
 import { ErrorTranslationEntity, ErrorCodeEntity, ErrorCategoryEntity } from '@/db';
 import pino from 'pino';
-import { BaseListService } from './BaseListService';
 import { CreateErrorDto, UpdateErrorDto, GetErrorOptions, LocalizedErrorResponse, ErrorListOptions } from '@/dto/errors';
 import { ResourceConflictError, ResourceNotFoundError, ServiceError } from '@/utils/errors';
+import { PaginatedResponse, PaginationDto } from '@/dto/common/pagination.dto';
+import { keysetPaginate } from '@/utils/pagination';
 
 /**
  * Service for managing error codes, extending BaseListService for list operations.
  */
-export class ErrorService extends BaseListService<ErrorCodeEntity> {
+export class ErrorService {
+  private dataSource: DataSource;
   private errorCategoryRepository: Repository<ErrorCategoryEntity>;
   private errorTranslationRepository: Repository<ErrorTranslationEntity>;
+  private errorCodeRepository: Repository<ErrorCodeEntity>;
   private logger: Logger;
 
   constructor(dataSource: DataSource) {
-    super(dataSource, ErrorCodeEntity);
+    this.dataSource = dataSource;
+    this.errorCodeRepository = this.dataSource.getRepository(ErrorCodeEntity);
     this.errorCategoryRepository = this.dataSource.getRepository(ErrorCategoryEntity);
     this.errorTranslationRepository = this.dataSource.getRepository(ErrorTranslationEntity);
     this.logger = pino({ name: 'error-service' });
@@ -39,7 +43,15 @@ export class ErrorService extends BaseListService<ErrorCodeEntity> {
   protected getAllowedRelations(): string[] {
     return ['category', 'translations'];
   }
-
+  async getAll(pagination: PaginationDto, baseUrl: string) {
+    const result = await keysetPaginate<ErrorCodeEntity>(this.errorCodeRepository, {
+      ...pagination,
+      alias: 'error',
+      searchableFields: this.getSearchableFields(),
+      baseUrl
+    });
+    return result;
+  }
   /**
    * Get error code by its unique code
    */
@@ -64,7 +76,7 @@ export class ErrorService extends BaseListService<ErrorCodeEntity> {
         findOptions.relations = relations;
       }
       
-      const errorCode = await this.repository.findOne({
+      const errorCode = await this.errorCodeRepository.findOne({
         where: { code },
         ...findOptions
       });
@@ -93,7 +105,7 @@ export class ErrorService extends BaseListService<ErrorCodeEntity> {
         throw new Error('Error code is required to create an error.');
     }
     try {
-      const existing = await this.repository.findOneBy({ code: data.code });
+      const existing = await this.errorCodeRepository.findOneBy({ code: data.code });
       if (existing) {
         throw new ResourceConflictError(`Error code already exists: ${data.code}`);
       }
@@ -104,9 +116,9 @@ export class ErrorService extends BaseListService<ErrorCodeEntity> {
           throw new ResourceNotFoundError(`Category not found: ${data.categoryId}`);
         }
       }
-
-      const newError = this.repository.create(data as ErrorCodeEntity);
-      return this.repository.save(newError);
+      console.log({data});
+      const newError = this.errorCodeRepository.create(data as ErrorCodeEntity);
+      return this.errorCodeRepository.save(newError);
     } catch (error) {
       if (error instanceof ResourceConflictError || error instanceof ResourceNotFoundError) {
         throw error;
