@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { DIContainer } from '@/di';
 
 // Import route handlers (to be created later)
+import getAll from './get-all';
 import getByErrorCode from './get-by-error-code';
 import getByLanguage from './get-by-language';
 import upsert from './upsert';
@@ -16,6 +17,9 @@ export default function (fastify: FastifyInstance, di: DIContainer) {
   
   // Get translations by language
   getByLanguage(fastify, di);
+  
+  // Get all translations
+  getAll(fastify, di);
   
   // Create or update translation
   upsert(fastify, di);

@@ -1,7 +1,7 @@
 // TranslationService.ts
 import { DataSource, Repository } from 'typeorm';
 import { ErrorTranslationEntity, ErrorCodeEntity } from '@/db';
-import { BaseListService } from './BaseListService';
+import { keysetPaginate } from '@/utils/pagination';
 import { Logger } from 'pino';
 import pino from 'pino';
 // Corrected DTO import and using placeholders for errors
@@ -12,12 +12,15 @@ declare class ResourceNotFoundError extends Error { constructor(message: string)
 /**
  * Service for managing error translations, extending BaseListService for list operations.
  */
-export class TranslationService extends BaseListService<ErrorTranslationEntity> {
+export class TranslationService {
+  private dataSource: DataSource;
+  private errorTranslationRepository: Repository<ErrorTranslationEntity>;
   private errorCodeRepository: Repository<ErrorCodeEntity>;
   private logger: Logger;
 
   constructor(dataSource: DataSource) {
-    super(dataSource, ErrorTranslationEntity);
+    this.dataSource = dataSource;
+    this.errorTranslationRepository = this.dataSource.getRepository(ErrorTranslationEntity);
     this.errorCodeRepository = this.dataSource.getRepository(ErrorCodeEntity);
     this.logger = pino({ name: 'translation-service' });
   }
@@ -55,7 +58,7 @@ export class TranslationService extends BaseListService<ErrorTranslationEntity> 
         throw new ResourceNotFoundError(`Error code not found: ${code}`);
       }
       // Correct where clause using the relation ID
-      return this.repository.find({ 
+      return this.errorTranslationRepository.find({ 
         where: { errorCode: { id: errorCode.id } }
       });
     } catch (error) {
@@ -72,7 +75,7 @@ export class TranslationService extends BaseListService<ErrorTranslationEntity> 
    */
   async getTranslationsByLanguage(language: string): Promise<ErrorTranslationEntity[]> {
      try {
-      return this.repository.find({ where: { language } });
+      return this.errorTranslationRepository.find({ where: { language } });
     } catch (error) {
       this.logger.error({ error, language }, 'Failed to get translations by language');
       throw new ServiceError('Failed to retrieve translations', { cause: error });
@@ -135,21 +138,34 @@ export class TranslationService extends BaseListService<ErrorTranslationEntity> 
 
   // Keep the original delete method
   async delete(id: number): Promise<{ success: boolean }> {
-    const translation = await this.repository.findOne({ 
+    const translation = await this.errorTranslationRepository.findOne({ 
       where: { id }
     });
 
     if (!translation) {
       throw new ResourceNotFoundError(`Translation not found: ${id}`);
     }   
-    const result = await this.repository.delete(id);
+    const result = await this.errorTranslationRepository.delete(id);
     return { success: result.affected !== null && result.affected !== undefined && result.affected > 0 };
   }
 
   // Keep deleteAllByErrorCode if needed
   async deleteAllByErrorCode(code: string): Promise<{ success: boolean }> {
     // Use 'code' instead of 'errorCode' which might be the object
-    const result = await this.repository.delete({ errorCode: { code: code } });
+    const result = await this.errorTranslationRepository.delete({ errorCode: { code: code } });
     return { success: result.affected !== null && result.affected !== undefined && result.affected > 0 };
+  }
+
+  /**
+   * Retrieves translations list using keyset pagination.
+   */
+  async getAll(query: Record<string, unknown>, baseUrl: string) {
+    const result = await keysetPaginate<ErrorTranslationEntity>(this.errorTranslationRepository, {
+      ...query,
+      alias: 'translation',
+      searchableFields: this.getSearchableFields(),
+      baseUrl,
+    });
+    return result;
   }
 }

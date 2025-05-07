@@ -1,0 +1,126 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Testing with Production-Like Environment
+
+## Overview
+
+ErrorHub's testing strategy is built around a "production-like" environment that maximizes test validity by minimizing mocks:
+
+1. **Real Implementations** – All tests use actual services, repositories, and routes.
+2. **In-Memory Database** – The only difference from production is an SQLite in-memory datasource used during tests.
+3. **Real DI Container** – The same dependency-injection structure is constructed for tests.
+4. **Isolated Tests** – Every test starts with a clean database state.
+
+## Test Structure Guidelines
+
+### Setup
+
+Use the central setup helper at `src/tests/setup.ts`:
+
+```typescript
+let app: FastifyInstance;
+
+beforeEach(async () => {
+  // Create a fresh test app for each test
+  app = await buildTestApp();
+});
+```
+
+### Data Creation
+
+Seed data with `TestData` helpers:
+
+```typescript
+const category = await TestData.seedCategory();
+const errorCode = await TestData.seedErrorCode({
+  code: 'TEST.CODE',
+  categoryId: category.id,
+});
+```
+
+### Route Testing
+
+Exercise endpoints through the fully-configured Fastify app:
+
+```typescript
+const response = await app.inject({
+  method: 'GET',
+  url: `/api/errors/${errorCode.code}`,
+});
+
+expect(response.statusCode).toBe(200);
+const result = JSON.parse(response.payload);
+expect(result.code).toBe(errorCode.code);
+```
+
+### Service Testing
+
+Call services directly when appropriate:
+
+```typescript
+const service = new ErrorService(testDataSource);
+const result = await service.getErrorByCode('TEST.CODE');
+expect(result?.code).toBe('TEST.CODE');
+```
+
+## Best Practices
+
+1. **Isolated Tests** – No shared state between tests.
+2. **Clean State** – Re-create the app and DB before each test.
+3. **Complete Flows** – Prefer end-to-end flows over micro-unit tests.
+4. **Edge Cases** – Cover error conditions thoroughly.
+5. **Consistent Patterns** – Follow the established patterns shown here.
+
+## Anti-Patterns to Avoid
+
+| ❌ Do **not** | Because |
+|---------------|---------|
+| Mock services with `jest.mock()` | Masks integration issues |
+| Stub repository methods | Prevents real DB queries |
+| Share test data between cases | Causes hidden coupling |
+| Query the DB directly | Breaks abstraction layers |
+| Test private methods | Test via public API instead |
+
+## DI Container in Tests
+
+```typescript
+const testContainer = {
+  db: testDataSource, // in-memory SQLite
+  services: {
+    error: new ErrorService(testDataSource),
+    category: new CategoryService(testDataSource),
+    translation: new TranslationService(testDataSource),
+  },
+};
+```
+
+## Testing Complex Queries (e.g., Pagination)
+
+1. Seed predictable datasets with known ordering.
+2. Verify response data **and** navigation links.
+3. Walk through multiple pages to test continuity.
+
+## Testing Error Handling
+
+```typescript
+it('returns 404 when error code not found', async () => {
+  const response = await app.inject({
+    method: 'GET',
+    url: '/api/errors/NONEXISTENT.CODE',
+  });
+
+  expect(response.statusCode).toBe(404);
+  const result = JSON.parse(response.payload);
+  expect(result.error.code).toBe('ERROR.NOT_FOUND');
+});
+```
+
+## TypeORM Testing Considerations
+
+1. Use `.create()` then `.save()` for clarity.
+2. When relations are needed, persist them explicitly.
+3. Remember SQLite limitations versus PostgreSQL.
+4. For critical flows, test transactions explicitly.

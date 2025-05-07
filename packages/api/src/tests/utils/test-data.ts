@@ -45,4 +45,36 @@ export class TestData {
     const errorCode = repository.create(defaultData);
     return repository.save(errorCode);
   }
+
+  static async seedTranslation(
+    data: Partial<ErrorTranslationEntity & { errorCode?: string | ErrorCodeEntity }> = {}
+  ): Promise<ErrorTranslationEntity> {
+    const translationRepo = testDataSource.getRepository(ErrorTranslationEntity);
+    const errorCodeRepo = testDataSource.getRepository(ErrorCodeEntity);
+
+    // Determine provided errorCode input if any
+    const errorCodeInput = data.errorCode;
+    let errorCodeEntity: ErrorCodeEntity | undefined;
+
+    if (typeof errorCodeInput === 'string') {
+      errorCodeEntity = await errorCodeRepo.findOne({ where: { code: errorCodeInput } }) ?? undefined;
+    } else if (errorCodeInput instanceof ErrorCodeEntity) {
+      errorCodeEntity = errorCodeInput;
+    }
+
+    // Create new ErrorCodeEntity if not provided/found
+    if (!errorCodeEntity) {
+      errorCodeEntity = await this.seedErrorCode();
+    }
+
+    const defaultData: Partial<ErrorTranslationEntity> = {
+      language: 'en',
+      message: 'Test translation message',
+      ...data,
+      errorCode: errorCodeEntity,
+    };
+
+    const translation = translationRepo.create(defaultData as ErrorTranslationEntity);
+    return translationRepo.save(translation);
+  }
 }

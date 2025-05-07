@@ -1,0 +1,60 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# Frontend Architecture Guidelines
+
+## UI Component Library
+
+- **shadcn/ui Only Policy**: ALL UI components MUST come from shadcn/ui. No exceptions.
+- **Component Installation**: Install components with CLI: `npx shadcn-ui@latest add [component]`
+- **Custom Styling**: Use Tailwind classes for styling, extending shadcn/ui's aesthetic
+- **No Component Frameworks**: No Material UI, Chakra, Mantine, etc. alongside shadcn
+
+## React Implementation
+
+- **Functional Components**: Use functional components with hooks exclusively
+- **TypeScript**: Strictly typed props, state, and event handlers
+- **File Structure**:
+  - `/components`: Reusable UI pieces
+  - `/pages`: Route-level components
+  - `/hooks`: Custom hooks
+  - `/lib`: Utilities and helpers
+  - `/api`: API client and service functions
+
+## State Management Options
+
+### Recommended Approaches (Choose One):
+
+1. **Zustand** (Lightweight):
+   - Perfect for admin UIs with simple global state
+   - Minimal boilerplate with TypeScript integration
+   - Middleware for persistence, devtools support
+
+2. **Context + useReducer** (Built-in):
+   - No additional dependencies
+   - Natural React paradigm
+   - Best for hierarchical state with clear domains
+
+3. **TanStack Query** (API State):
+   - Handles server state, caching, and mutations
+   - Use alongside local state management
+   - Required for efficient API interactions
+
+## Form Management
+
+- **React Hook Form**: Pair with shadcn/ui form components
+- **Zod**: For form validation, matching API validation schemas
+
+## Performance Guidelines
+
+- **Virtualization**: For large lists/tables (react-window/react-virtualized)
+- **Code-Splitting**: Lazy load routes and heavy components
+- **Memoization**: Use React.memo, useMemo, and useCallback wisely
+
+## Error Management Integration
+
+- Use our own ErrorHub SDK for frontend error handling
+- Localize all UI error messages through ErrorHub
+- Create error boundary components that integrate with our system

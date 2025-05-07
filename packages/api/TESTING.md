@@ -1,241 +1,118 @@
-# Testing Fastify 5.3.2 with Vitest
+# ErrorHub Testing Approach
 
-This document explains our approach to testing a Fastify 5.3.2 application with Vitest without using mocks.
+## Testing Philosophy: Production-Like Environment
 
-## Core Principles
+ErrorHub uses a "production-like" testing approach that maximizes test validity by minimizing mocks:
 
-1. **Real Implementations**: Use real implementations of all components rather than mocks
-2. **In-Memory Database**: Use SQLite in-memory database for tests instead of mocking repositories
-3. **Isolated Tests**: Each test runs with a clean database
-4. **Dependency Injection**: Use the same DI container pattern as the main application, but with test versions
+- **Real Implementations**: Tests use actual services, repositories, and routes - no mocks
+- **Production DI Container**: Same DI structure as production with real service implementations
+- **In-Memory Database**: Only the data source differs (SQLite in-memory instead of PostgreSQL)
+- **Isolated Tests**: Each test runs with a clean database state
+- **Full Integration**: Tests interact with the API through the same endpoints as production
 
 ## Test Setup Structure
 
 ```
 src/
 └── tests/
-    ├── setup.ts                    # Global test setup code
-    ├── utils/                      # Test utilities
-    │   ├── test-di.ts              # Test DI container
-    │   ├── app-helper.ts           # Helper to build Fastify test instances 
-    │   └── test-data.ts            # Utilities for seeding test data
-    ├── routes/                     # Route tests
-    │   └── error-routes.test.ts    # Tests for error routes
-    └── repositories/               # Repository tests
-        └── ErrorCodeRepository.test.ts  # Tests for ErrorCodeRepository
+    ├── setup.ts                 # Global test setup with app builder and in-memory DB
+    ├── utils/                   # Test utilities
+    │   ├── test-data.ts         # Helpers for seeding test data
+    │   └── cursor-utils.test.ts # Utility tests
+    ├── routes/                  # API route integration tests
+    │   ├── error-routes.test.ts
+    │   └── ...
+    ├── repositories/            # Repository tests
+    │   ├── ErrorCodeRepository.test.ts
+    │   └── ...
+    └── services/                # Service tests
+        └── ...
 ```
 
 ## Key Components
 
-### 1. Vitest Configuration (vitest.config.js)
+### 1. Test Database Setup (`setup.ts`)
 
-```javascript
-const path = require('path');
-const { defineConfig } = require('vitest/config');
-
-module.exports = defineConfig({
-  test: {
-    environment: 'node',
-    globals: true,
-    testTimeout: 10000, // 10 seconds for API tests
-    setupFiles: ['src/tests/setup.ts'],
-    include: ['src/tests/**/*.test.ts'],
-    watch: false, // Disable in CI
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'json', 'html'],
-      exclude: ['node_modules/', 'dist/', '**/*.d.ts', '**/types.ts', 'src/tests'],
-    },
-  },
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src')
-    }
-  }
-});
-```
-
-### 2. Test Setup (setup.ts)
-
-The test setup file initializes an in-memory SQLite database for tests:
+The test database initializes once for all tests and clears between tests:
 
 ```typescript
-import 'reflect-metadata';
-import { DataSource } from 'typeorm';
-import { afterAll, beforeAll, beforeEach } from 'vitest';
-import { ErrorCodeEntity } from '../db/entities/ErrorCodeEntity';
-import { ErrorCategoryEntity } from '../db/entities/ErrorCategoryEntity';
-import { ErrorTranslationEntity } from '../db/entities/ErrorTranslationEntity';
-
-// Test database setup
+// In-memory database for tests
 export const testDataSource = new DataSource({
   type: 'sqlite',
-  database: ':memory:', // In-memory SQLite DB for tests
+  database: ':memory:',
   entities: [ErrorCodeEntity, ErrorCategoryEntity, ErrorTranslationEntity],
-  synchronize: true, // Auto-create schema
-  logging: false, // Disable logs in tests
+  synchronize: true,
+  logging: false
 });
 
-// Run before all tests
-beforeAll(async () => {
-  // Initialize and connect to test database
-  await testDataSource.initialize();
-  console.log('Test DataSource initialized with in-memory SQLite');
-});
-
-// Run after all tests
-afterAll(async () => {
-  // Close the database connection
-  if (testDataSource.isInitialized) {
-    await testDataSource.destroy();
-    console.log('Test DataSource destroyed');
-  }
-});
-
-// Clean up database before each test
+// Before each test, clear all data
 beforeEach(async () => {
-  // Clear all data from tables
   if (testDataSource.isInitialized) {
-    const entities = testDataSource.entityMetadatas;
-    
-    // Drop all tables in reverse order (to handle foreign key constraints)
-    for (const entity of entities.slice().reverse()) {
-      const repository = testDataSource.getRepository(entity.name);
-      await repository.clear();
+    // Clear tables with proper order for foreign keys
+    await testDataSource.query('PRAGMA foreign_keys = OFF;');
+    const entities = testDataSource.entityMetadatas.reverse();
+    for (const entity of entities) {
+      await testDataSource.query(`DELETE FROM ${entity.tableName}`);
     }
+    await testDataSource.query('PRAGMA foreign_keys = ON;');
   }
 });
 ```
 
-### 3. Test DI Container (test-di.ts)
+### 2. Application Builder (`setup.ts`)
 
-Create a test dependency injection container that uses the same real implementations but with the test database:
+The test setup creates real Fastify instances with all middleware and routes:
 
 ```typescript
-import { DIContainer } from '@/di';
-import { testDataSource } from '../setup';
-import { ErrorService } from '@/services/ErrorService';
-import { CategoryService } from '@/services/CategoryService';
-import { TranslationService } from '@/services/TranslationService';
+export async function buildTestApp(): Promise<FastifyInstance> {
+  const app = Fastify({
+    logger: false  // Disable logging in tests
+  });
 
-export function createTestContainer(): DIContainer {
-  // Use the test database connection
-  const db = testDataSource;
+  // Ensure test DB is initialized
+  if (!testDataSource.isInitialized) {
+    await testDataSource.initialize();
+  }
   
-  // Initialize services with test database
+  // Create real service instances with test database
   const services = {
-    error: new ErrorService(db),
-    category: new CategoryService(db),
-    translation: new TranslationService(db)
+    error: new ErrorService(testDataSource),
+    category: new CategoryService(testDataSource),
+    translation: new TranslationService(testDataSource)
   };
   
-  // Return assembled container
-  return {
-    db,
+  // Create test DI container with these services
+  const testContainer = {
+    db: testDataSource,
     services
   };
-}
-
-// Singleton test container instance
-export const testContainer = createTestContainer();
-```
-
-### 4. Fastify App Helper (app-helper.ts)
-
-This utility helps build Fastify instances for testing:
-
-```typescript
-import Fastify, { FastifyInstance } from 'fastify';
-import { DIContainer } from '@/di';
-import { testContainer } from './test-di';
-
-export async function buildTestApp(options: {
-  di?: DIContainer;
-  withPlugins?: boolean;
-  withRoutes?: boolean;
-} = {}): Promise<FastifyInstance> {
-  // Default options
-  const {
-    di = testContainer,
-    withPlugins = true,
-    withRoutes = true
-  } = options;
-
-  // Create a fresh Fastify instance for testing
-  const app = Fastify({
-    logger: false // Disable logging in tests
-  });
-
-  // Decorate with DI container
-  app.decorate('di', di);
-
-  // Register plugins if needed
-  if (withPlugins) {
-    const { errorHandler } = await import('@/middleware/error-handler');
-    app.setErrorHandler(errorHandler);
-    
-    const diPlugin = await import('@/plugins/di-plugin');
-    await app.register(diPlugin.default);
-    
-    const validationPlugin = await import('@/plugins/validation-plugin');
-    await app.register(validationPlugin.default);
-  }
-
-  // Register routes if needed
-  if (withRoutes) {
-    const errorRoutes = await import('@/routes/error-routes');
-    await app.register(errorRoutes.default, { prefix: '/api/errors' });
-    
-    // Add other routes as needed
-  }
-
-  return app;
-}
-
-export async function buildTestAppWithRoute(
-  routeHandler: (fastify: FastifyInstance, container: DIContainer) => void | Promise<void>,
-  options: {
-    di?: DIContainer;
-    prefix?: string;
-    withPlugins?: boolean;
-  } = {}
-): Promise<FastifyInstance> {
-  const {
-    di = testContainer,
-    prefix = '',
-    withPlugins = true
-  } = options;
-
-  const app = await buildTestApp({
-    di,
-    withPlugins,
-    withRoutes: false
-  });
-
-  await app.register(async (instance) => {
-    await routeHandler(instance, di);
-  }, { prefix });
-
+  
+  // Set the container as a decorator
+  app.decorate('di', testContainer);
+  
+  // Register standard middleware and routes
+  app.setErrorHandler(errorHandler);
+  await app.register(validationPlugin);
+  await app.register(routes, { prefix: '/api' });
+  
   return app;
 }
 ```
 
-### 5. Test Data Helper (test-data.ts)
+### 3. Test Data Helpers (`test-data.ts`)
 
-Helper functions to populate test data:
+Helper methods to create test data with unique values:
 
 ```typescript
-import { testDataSource } from '../setup';
-import { ErrorCodeEntity } from '@/db/entities/ErrorCodeEntity';
-import { ErrorCategoryEntity } from '@/db/entities/ErrorCategoryEntity';
-import { ErrorTranslationEntity } from '@/db/entities/ErrorTranslationEntity';
-
 export class TestData {
   static async seedCategory(data: Partial<ErrorCategoryEntity> = {}): Promise<ErrorCategoryEntity> {
     const repository = testDataSource.getRepository(ErrorCategoryEntity);
     
+    // Generate unique category name
+    const uniqueTimestamp = Date.now();
+    
     const defaultData = {
-      name: 'Test Category',
+      name: `Test Category ${uniqueTimestamp}`,
       description: 'Test category description',
       ...data
     };
@@ -245,128 +122,121 @@ export class TestData {
   }
   
   static async seedErrorCode(data: Partial<ErrorCodeEntity> = {}): Promise<ErrorCodeEntity> {
-    const repository = testDataSource.getRepository(ErrorCodeEntity);
-    
-    // Create category if needed
-    if (!data.categoryId && !data.category) {
-      const category = await this.seedCategory();
-      data.categoryId = category.id;
-    }
-    
-    const defaultData = {
-      code: 'TEST.ERROR',
-      defaultMessage: 'This is a test error',
-      ...data
-    };
-    
-    const errorCode = repository.create(defaultData);
-    return repository.save(errorCode);
+    // Similar implementation for error codes
   }
   
   static async seedErrorTranslation(data: Partial<ErrorTranslationEntity> = {}): Promise<ErrorTranslationEntity> {
-    const repository = testDataSource.getRepository(ErrorTranslationEntity);
-    
-    // Create error code if needed
-    if (!data.errorCode) {
-      const errorCode = await this.seedErrorCode();
-      data.errorCode = errorCode;
-    }
-    
-    const defaultData = {
-      language: 'es',
-      message: 'Este es un error de prueba',
-      ...data
-    };
-    
-    const translation = repository.create(defaultData);
-    return repository.save(translation);
+    // Similar implementation for translations
   }
 }
 ```
 
-## Example Tests
+## Writing Tests
 
-### Route Test Example
+### Route Tests
+
+Test HTTP endpoints by creating a full app instance and making requests:
 
 ```typescript
-import { describe, it, expect, beforeEach } from 'vitest';
-import { FastifyInstance } from 'fastify';
-import { buildTestApp } from '../utils/app-helper';
-import { TestData } from '../utils/test-data';
-
 describe('Error Routes', () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
+    // Create a fresh test app for each test
     app = await buildTestApp();
   });
 
-  describe('GET /api/errors', () => {
-    it('returns all error codes', async () => {
-      // Seed test data
-      await TestData.seedErrorCode({ code: 'TEST.ERROR_1' });
-      await TestData.seedErrorCode({ code: 'TEST.ERROR_2' });
-
-      // Make request
-      const response = await app.inject({
-        method: 'GET',
-        url: '/api/errors',
-      });
-
-      // Verify response
-      expect(response.statusCode).toBe(200);
-      expect(JSON.parse(response.payload)).toHaveLength(2);
+  it('returns error code by ID', async () => {
+    // Seed test data
+    const errorCode = await TestData.seedErrorCode({
+      code: 'TEST.ERROR',
+      defaultMessage: 'Test error message'
     });
+
+    // Make request to the endpoint
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/errors/${errorCode.code}`,
+    });
+
+    // Verify response
+    expect(response.statusCode).toBe(200);
+    const result = JSON.parse(response.payload);
+    expect(result.code).toBe(errorCode.code);
+    expect(result.message).toBe(errorCode.defaultMessage);
   });
 });
 ```
 
-### Repository Test Example
+### Service Tests
+
+Test service methods directly using the test database:
 
 ```typescript
-import { describe, it, expect } from 'vitest';
-import { ErrorCodeRepository } from '@/db/repositories/ErrorCodeRepository';
-import { testDataSource } from '../setup';
-import { TestData } from '../utils/test-data';
+describe('ErrorService', () => {
+  // Create service with test database
+  const service = new ErrorService(testDataSource);
 
-describe('ErrorCodeRepository', () => {
-  // Create a real repository instance with the test database
-  const repository = new ErrorCodeRepository(testDataSource);
-
-  it('creates a new error code', async () => {
+  it('creates a new error', async () => {
     // Create a test category
     const category = await TestData.seedCategory();
 
-    // Create error code data
-    const data = {
-      code: 'TEST.REPO.CREATE',
-      defaultMessage: 'Create test',
+    // Test service method
+    const result = await service.createError({
+      code: 'TEST.SERVICE',
+      defaultMessage: 'Test service method',
       categoryId: category.id
-    };
+    });
 
-    // Call the repository method
-    const result = await repository.create(data);
+    // Verify result
+    expect(result.code).toBe('TEST.SERVICE');
+    expect(result.defaultMessage).toBe('Test service method');
+    expect(result.categoryId).toBe(category.id);
+  });
+});
+```
 
-    // Verify results
-    expect(result.code).toBe(data.code);
-    expect(result.defaultMessage).toBe(data.defaultMessage);
+## Pagination Testing
+
+The project includes specialized tests for cursor-based pagination:
+
+```typescript
+describe('Cursor-Based Pagination', () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    app = await buildTestApp();
+    
+    // Seed predictable data for pagination tests
+    for (let i = 1; i <= 25; i++) {
+      await TestData.seedErrorCode({
+        code: `TEST.PAGINATION.${i}`,
+        defaultMessage: `Pagination test error ${i}`
+      });
+    }
+  });
+
+  it('returns paginated results with working cursor navigation', async () => {
+    const firstResponse = await app.inject({
+      method: 'GET',
+      url: '/api/errors?limit=10'
+    });
+    
+    // Test results and navigation links
+    // ...
   });
 });
 ```
 
 ## Advantages of this Approach
 
-1. **Real-world Testing**: By using real implementations, tests are much closer to the real-world usage and can detect issues that might not be caught by tests with mocks.
+1. **Higher Confidence**: Tests verify actual behavior of the entire system
+2. **Maintenance Efficiency**: Changes to implementations don't require test updates unless behavior changes
+3. **Complete Coverage**: Tests cover both business logic and integration between components
+4. **Simplified Testing**: No complex mocks to maintain
+5. **Real-World Behavior**: Tests match production behavior more closely
 
-2. **Reduced Test Maintenance**: Since the tests use the same implementations as the application, changes to the components are automatically reflected in tests, reducing maintenance.
-
-3. **Higher Confidence**: Tests provide higher confidence that the application works as expected, since they're testing the actual components.
-
-4. **Better Coverage**: Tests cover both the implementation details and the integration between components.
-
-5. **Simpler Setup**: Once you've set up the initial testing infrastructure, writing tests becomes much simpler without having to create complex mocks.
-
-## Running the Tests
+## Running Tests
 
 ```bash
 # Run all tests
@@ -377,4 +247,12 @@ npm run test:watch
 
 # Run with coverage
 npm run test:coverage
-``` 
+```
+
+## Best Practices
+
+1. **Always use TestData helpers** to create test data with unique values
+2. **Create a fresh test app** for each test to avoid state leakage
+3. **Test complete flows** rather than isolated units
+4. **Keep tests independent** - don't rely on data from other tests
+5. **Test edge cases** thoroughly, including error handling

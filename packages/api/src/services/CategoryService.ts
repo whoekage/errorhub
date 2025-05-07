@@ -1,8 +1,8 @@
 import { DataSource, Repository } from 'typeorm';
 import { ErrorCategoryEntity, ErrorCodeEntity } from '@/db';
-import { BaseListService } from './BaseListService';
 import { Logger } from 'pino';
 import pino from 'pino';
+import { keysetPaginate } from '@/utils/pagination';
 
 // Placeholder types (replace with actual DTOs/Interfaces)
 type CreateCategoryDto = Partial<ErrorCategoryEntity> & { name: string }; // Ensure name is required
@@ -15,16 +15,30 @@ declare class ResourceConflictError extends Error { constructor(message: string)
 /**
  * Service for managing error categories, extending BaseListService for list operations.
  */
-export class CategoryService extends BaseListService<ErrorCategoryEntity> {
+export class CategoryService {
+  private dataSource: DataSource;
+  private errorCategoryRepository: Repository<ErrorCategoryEntity>;
   private errorCodeRepository: Repository<ErrorCodeEntity>;
   private logger: Logger;
 
-  constructor(
-    protected override dataSource: DataSource
-  ) {
-    super(dataSource, ErrorCategoryEntity);
+  constructor(dataSource: DataSource) {
+    this.dataSource = dataSource;
+    this.errorCategoryRepository = this.dataSource.getRepository(ErrorCategoryEntity);
     this.errorCodeRepository = this.dataSource.getRepository(ErrorCodeEntity);
     this.logger = pino({ name: 'category-service' });
+  }
+
+  /**
+   * Retrieves categories list using keyset pagination (same approach as ErrorService).
+   */
+  async getAll(query: Record<string, unknown>, baseUrl: string) {
+    const result = await keysetPaginate<ErrorCategoryEntity>(this.errorCategoryRepository, {
+      ...query,
+      alias: 'category',
+      searchableFields: this.getSearchableFields(),
+      baseUrl,
+    });
+    return result;
   }
 
   // --- Implementation of BaseListService abstract methods --- 
@@ -54,7 +68,7 @@ export class CategoryService extends BaseListService<ErrorCategoryEntity> {
    */
   async getCategoryById(id: number): Promise<ErrorCategoryEntity | null> {
     try {
-      return this.repository.findOne({ 
+      return this.errorCategoryRepository.findOne({ 
         where: { id },
         relations: { errorCodes: true }
       });
@@ -69,7 +83,7 @@ export class CategoryService extends BaseListService<ErrorCategoryEntity> {
    */
   async getCategoryByName(name: string): Promise<ErrorCategoryEntity | null> {
     try {
-      return this.repository.findOne({ where: { name } });
+      return this.errorCategoryRepository.findOne({ where: { name } });
     } catch (error) {
        this.logger.error({ error, name }, 'Failed to get category by name');
        throw new ServiceError('Failed to retrieve category by name', { cause: error });
@@ -84,12 +98,12 @@ export class CategoryService extends BaseListService<ErrorCategoryEntity> {
         throw new Error('Category name is required.');
     }
     try {
-      const existing = await this.repository.findOneBy({ name: data.name });
+      const existing = await this.errorCategoryRepository.findOneBy({ name: data.name });
       if (existing) {
         throw new ResourceConflictError(`Category with name '${data.name}' already exists`);
       }
-      const newCategory = this.repository.create(data as ErrorCategoryEntity);
-      return this.repository.save(newCategory);
+      const newCategory = this.errorCategoryRepository.create(data as ErrorCategoryEntity);
+      return this.errorCategoryRepository.save(newCategory);
     } catch (error) {
       if (error instanceof ResourceConflictError) {
         throw error;
@@ -104,20 +118,20 @@ export class CategoryService extends BaseListService<ErrorCategoryEntity> {
    */
   async updateCategory(id: number, data: UpdateCategoryDto): Promise<ErrorCategoryEntity> {
     try {
-      const category = await this.repository.findOneBy({ id });
+      const category = await this.errorCategoryRepository.findOneBy({ id });
       if (!category) {
         throw new ResourceNotFoundError(`Category with ID ${id} not found`);
       }
       
       if (data.name && data.name !== category.name) {
-        const existing = await this.repository.findOneBy({ name: data.name });
+        const existing = await this.errorCategoryRepository.findOneBy({ name: data.name });
         if (existing) {
           throw new ResourceConflictError(`Category with name '${data.name}' already exists`);
         }
       }
 
-      this.repository.merge(category, data);
-      return this.repository.save(category);
+      this.errorCategoryRepository.merge(category, data);
+      return this.errorCategoryRepository.save(category);
     } catch (error) {
       if (error instanceof ResourceNotFoundError || error instanceof ResourceConflictError) {
         throw error;
@@ -132,7 +146,7 @@ export class CategoryService extends BaseListService<ErrorCategoryEntity> {
    */
   async deleteCategory(id: number): Promise<boolean> {
     try {
-      const category = await this.repository.findOne({ 
+      const category = await this.errorCategoryRepository.findOne({ 
           where: { id }, 
           relations: { errorCodes: true } 
       });
@@ -147,7 +161,7 @@ export class CategoryService extends BaseListService<ErrorCategoryEntity> {
          );
       }
 
-      const result = await this.repository.delete(id);
+      const result = await this.errorCategoryRepository.delete(id);
       return result.affected !== null && result.affected !== undefined && result.affected > 0;
     } catch (error) {
       if (error instanceof ResourceNotFoundError || error instanceof ResourceConflictError) {
