@@ -5,6 +5,7 @@ import ErrorListPage from './pages/ErrorListPage';
 import { TranslationsPage } from './pages/TranslationsPage';
 import { CategoriesPage } from './pages/CategoriesPage';
 import CreateErrorCodePage from './pages/CreateErrorCodePage';
+import LanguagesPage from './pages/LanguagesPage';
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
         <Route path="errors/new" element={<CreateErrorCodePage />} />
         <Route path="translations" element={<TranslationsPage />} />
         <Route path="categories" element={<CategoriesPage />} />
+        <Route path="settings/languages" element={<LanguagesPage />} />
       </Route>
     </Routes>
   );
