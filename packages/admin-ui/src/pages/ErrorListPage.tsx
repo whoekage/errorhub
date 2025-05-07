@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -37,6 +37,7 @@ const dummyErrors = Array.from({ length: 35 }, (_, i) => ({
 const ITEMS_PER_PAGE_OPTIONS = [5, 10, 20, 50];
 
 const ErrorListPage: React.FC = () => {
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(ITEMS_PER_PAGE_OPTIONS[1]); // Default to 10
@@ -63,6 +64,20 @@ const ErrorListPage: React.FC = () => {
 
   const handleNextPage = () => {
     setCurrentPage((prev) => Math.min(prev + 1, totalPages));
+  };
+
+  const handleEdit = (errorCode: string) => {
+    navigate(`/errors/edit/${errorCode}`);
+  };
+
+  const handleDelete = (errorCode: string, errorId: string) => {
+    if (window.confirm(`Are you sure you want to delete error code ${errorCode}?`)) {
+      console.log('Deleting error code:', errorCode, 'with ID:', errorId);
+      // Simulate API call for delete
+      // To reflect in UI without real API:
+      // setCurrentErrorList(prev => prev.filter(err => err.id !== errorId));
+      // setCurrentPage(1); // Or adjust to stay on page if items remain
+    }
   };
 
   const renderPageNumbers = () => {
@@ -202,9 +217,9 @@ const ErrorListPage: React.FC = () => {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>Edit</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleEdit(error.code)}>Edit</DropdownMenuItem>
                         <DropdownMenuItem>Duplicate</DropdownMenuItem>
-                        <DropdownMenuItem className="text-red-600 hover:text-red-600 hover:bg-red-50">Delete</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleDelete(error.code, error.id)} className="text-red-600 hover:text-red-600 hover:bg-red-50">Delete</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>

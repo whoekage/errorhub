@@ -5,6 +5,7 @@ import ErrorListPage from './pages/ErrorListPage';
 import { TranslationsPage } from './pages/TranslationsPage';
 import { CategoriesPage } from './pages/CategoriesPage';
 import CreateErrorCodePage from './pages/CreateErrorCodePage';
+import UpdateErrorCodePage from './pages/UpdateErrorCodePage';
 import LanguagesPage from './pages/LanguagesPage';
 
 function App() {
@@ -14,6 +15,7 @@ function App() {
         <Route index element={<DashboardPage />} />
         <Route path="errors" element={<ErrorListPage />} />
         <Route path="errors/new" element={<CreateErrorCodePage />} />
+        <Route path="errors/edit/:errorCodeParam" element={<UpdateErrorCodePage />} />
         <Route path="translations" element={<TranslationsPage />} />
         <Route path="categories" element={<CategoriesPage />} />
         <Route path="settings/languages" element={<LanguagesPage />} />
