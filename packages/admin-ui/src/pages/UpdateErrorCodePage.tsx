@@ -12,6 +12,17 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Badge } from "@/components/ui/badge";
 import { X, Trash2 } from "lucide-react"; // Added Trash2 for delete button
 import { Label } from "@/components/ui/label";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  // AlertDialogTrigger, // We'll trigger programmatically
+} from "@/components/ui/alert-dialog";
 
 // Assuming these are defined and exported from a shared location or CreateErrorCodePage.tsx
 // For now, redefine them here or we can centralize later.
@@ -60,6 +71,7 @@ const UpdateErrorCodePage: React.FC = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
   const [errorNotFound, setErrorNotFound] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false); // State for AlertDialog
 
   const form = useForm<UpdateErrorCodeFormValues>({
     resolver: zodResolver(updateErrorCodeSchema),
@@ -106,13 +118,11 @@ const UpdateErrorCodePage: React.FC = () => {
     });
   };
 
-  const handleDelete = () => {
-    if (window.confirm(`Are you sure you want to delete error code ${errorCodeParam}?`)) {
-      console.log('Deleting error code:', errorCodeParam);
-      // Simulate API call for delete
-      // After successful deletion:
-      navigate('/errors');
-    }
+  const confirmDelete = () => {
+    console.log('Deleting error code:', errorCodeParam);
+    // Simulate API call for delete
+    setIsDeleteDialogOpen(false); // Close dialog
+    navigate('/errors'); // Navigate after simulated delete
   };
   
   const [categorySearch, setCategorySearch] = useState('');
@@ -134,82 +144,105 @@ const UpdateErrorCodePage: React.FC = () => {
   }
 
   return (
-    <div className="container mx-auto p-4 max-w-6xl">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Update Error Code: <span className="text-primary">{errorCodeParam}</span></h1>
-        <div className="flex gap-2">
-            <Button type="submit" form="update-error-code-form" disabled={isSubmitting} >
-            {isSubmitting ? 'Saving...' : 'Save Changes'}
-            </Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={isSubmitting}>
-                <Trash2 className="mr-2 h-4 w-4" /> Delete
-            </Button>
+    <>
+      <div className="container mx-auto p-4 max-w-6xl">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold">Update Error Code: <span className="text-primary">{errorCodeParam}</span></h1>
+          <div className="flex gap-2">
+              <Button variant="destructive" onClick={() => setIsDeleteDialogOpen(true)} disabled={isSubmitting}> 
+                  <Trash2 className="mr-2 h-4 w-4" /> Delete
+              </Button>
+              <Button type="submit" form="update-error-code-form" disabled={isSubmitting} >
+              {isSubmitting ? 'Saving...' : 'Save Changes'}
+              </Button>
+          </div>
         </div>
-      </div>
-      <Form {...form}>
-        <form id="update-error-code-form" onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="md:col-span-2">
-            <CardHeader><CardTitle>Error Details</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <FormField control={control} name="code" render={({ field }) => ( <FormItem> <FormLabel>Error Code* (Read-only)</FormLabel> <FormControl><Input placeholder="e.g., AUTH.01" {...field} readOnly className="bg-muted/50" /></FormControl> <FormDescription>Unique code for the error. Cannot be changed.</FormDescription> <FormMessage /> </FormItem> )}/>
-              {languages.map((lang) => (
-                <FormField key={lang} control={control} name={`translations.${lang}`} render={({ field }) => ( <FormItem> <FormLabel>Translation: {lang.toUpperCase()}</FormLabel> <FormControl><Textarea placeholder={`Enter translation for ${lang.toUpperCase()}`} {...field} value={field.value || ''} /></FormControl> <FormMessage /> </FormItem> )}/>
-              ))}
-              {errors.translations && typeof errors.translations.message === 'string' && (
-                 <p className="text-sm font-medium text-destructive">{errors.translations.message}</p>
-              )}
-            </CardContent>
-          </Card>
+        <Form {...form}>
+          <form id="update-error-code-form" onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card className="md:col-span-2">
+              <CardHeader><CardTitle>Error Details</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <FormField control={control} name="code" render={({ field }) => ( <FormItem> <FormLabel>Error Code* (Read-only)</FormLabel> <FormControl><Input placeholder="e.g., AUTH.01" {...field} readOnly className="bg-muted/50" /></FormControl> <FormDescription>Unique code for the error. Cannot be changed.</FormDescription> <FormMessage /> </FormItem> )}/>
+                {languages.map((lang) => (
+                  <FormField key={lang} control={control} name={`translations.${lang}`} render={({ field }) => ( <FormItem> <FormLabel>Translation: {lang.toUpperCase()}</FormLabel> <FormControl><Textarea placeholder={`Enter translation for ${lang.toUpperCase()}`} {...field} value={field.value || ''} /></FormControl> <FormMessage /> </FormItem> )}/>
+                ))}
+                {errors.translations && typeof errors.translations.message === 'string' && (
+                   <p className="text-sm font-medium text-destructive">{errors.translations.message}</p>
+                )}
+              </CardContent>
+            </Card>
 
-          <Card className="md:col-span-1">
-            <CardHeader><CardTitle>Select Categories*</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-            <div className="space-y-2">
-                <Label className="text-sm font-medium">Selected:</Label>
-                <div className="flex flex-wrap gap-1 min-h-[40px] rounded-md border border-input bg-background p-2">
-                    {selectedCategories?.length === 0 && <span className="text-xs text-muted-foreground">No categories selected</span>}
-                    {selectedCategories?.map((category) => (
-                        <Badge key={category} variant="secondary">
-                            {category}
-                            <button type="button" className="ml-1 rounded-full outline-none ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2" onClick={() => removeCategory(category)}>
-                                <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
-                            </button>
-                        </Badge>
-                    ))}
-                </div>
-              </div>
+            <Card className="md:col-span-1">
+              <CardHeader><CardTitle>Select Categories*</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="category-search">Search Categories</Label>
-                <Input id="category-search" placeholder="Search..." value={categorySearch} onChange={(e) => setCategorySearch(e.target.value)} />
-              </div>
-               <FormField
-                  control={control}
-                  name="selectedCategories"
-                  render={({ field }) => (
-                    <FormItem className="mt-4 border rounded-md p-4">
-                      <div className="mb-4">
-                          <FormLabel className="text-base font-semibold">Available Categories</FormLabel>
-                      </div>
-                        {filteredCategories.map((category) => (
-                          <FormItem key={`pub-cat-${category}`} className="flex flex-row items-center space-x-3 space-y-0 mb-2">
-                            <FormControl>
-                              <Checkbox checked={field.value?.includes(category)} onCheckedChange={(checked) => { const currentValues = field.value || []; if (checked) { setValue('selectedCategories', [...currentValues, category], { shouldValidate: true }); } else { setValue('selectedCategories', currentValues.filter(value => value !== category), { shouldValidate: true }); } }} />
-                            </FormControl>
-                            <FormLabel className="font-normal cursor-pointer">{category}</FormLabel>
-                          </FormItem>
-                        ))}
-                        {filteredCategories.length === 0 && categorySearch && (
-                           <p className="text-sm text-muted-foreground">No categories found matching "{categorySearch}".</p>
-                        )}
-                      <FormMessage /> 
-                    </FormItem>
-                  )}
-                />
-            </CardContent>
-          </Card>
-        </form>
-      </Form>
-    </div>
+                  <Label className="text-sm font-medium">Selected:</Label>
+                  <div className="flex flex-wrap gap-1 min-h-[40px] rounded-md border border-input bg-background p-2">
+                      {selectedCategories?.length === 0 && <span className="text-xs text-muted-foreground">No categories selected</span>}
+                      {selectedCategories?.map((category) => (
+                          <Badge key={category} variant="secondary">
+                              {category}
+                              <button type="button" className="ml-1 rounded-full outline-none ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2" onClick={() => removeCategory(category)}>
+                                  <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                              </button>
+                          </Badge>
+                      ))}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="category-search">Search Categories</Label>
+                  <Input id="category-search" placeholder="Search..." value={categorySearch} onChange={(e) => setCategorySearch(e.target.value)} />
+                </div>
+                 <FormField
+                    control={control}
+                    name="selectedCategories"
+                    render={({ field }) => (
+                      <FormItem className="mt-4 border rounded-md p-4">
+                        <div className="mb-4">
+                            <FormLabel className="text-base font-semibold">Available Categories</FormLabel>
+                        </div>
+                          {filteredCategories.map((category) => (
+                            <FormItem key={`pub-cat-${category}`} className="flex flex-row items-center space-x-3 space-y-0 mb-2">
+                              <FormControl>
+                                <Checkbox checked={field.value?.includes(category)} onCheckedChange={(checked) => { const currentValues = field.value || []; if (checked) { setValue('selectedCategories', [...currentValues, category], { shouldValidate: true }); } else { setValue('selectedCategories', currentValues.filter(value => value !== category), { shouldValidate: true }); } }} />
+                              </FormControl>
+                              <FormLabel className="font-normal cursor-pointer">{category}</FormLabel>
+                            </FormItem>
+                          ))}
+                          {filteredCategories.length === 0 && categorySearch && (
+                             <p className="text-sm text-muted-foreground">No categories found matching "{categorySearch}".</p>
+                          )}
+                        <FormMessage /> 
+                      </FormItem>
+                    )}
+                  />
+              </CardContent>
+            </Card>
+          </form>
+        </Form>
+      </div>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        {/* <AlertDialogTrigger asChild>
+          <Button variant="outline">Show Dialog</Button> // Not needed, triggering via state
+        </AlertDialogTrigger> */}
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the error code 
+              <span className="font-semibold text-foreground">{errorCodeParam}</span> and all of its associated translations.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 };
 

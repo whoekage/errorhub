@@ -1,0 +1,15 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# Shadcn/UI Documentation Reference
+
+When performing frontend development tasks, especially those involving UI components, always consult the official [shadcn/ui documentation](https://ui.shadcn.com/docs).
+
+This includes:
+- Checking for available components.
+- Verifying correct installation and usage patterns (e.g., `npx shadcn@latest add [component]`).
+- Understanding component props and styling conventions (Tailwind CSS).
+
+Adhering to shadcn/ui patterns ensures consistency and leverages the chosen design system effectively.

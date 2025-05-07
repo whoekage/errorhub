@@ -25,9 +25,26 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+  } from "@/components/ui/alert-dialog";
+
+interface ErrorItem {
+    id: string;
+    code: string;
+    description: string;
+    categories: string[];
+}
 
 // Expanded Dummy data for initial display
-const dummyErrors = Array.from({ length: 35 }, (_, i) => ({
+const dummyErrors: ErrorItem[] = Array.from({ length: 35 }, (_, i) => ({
   id: (i + 1).toString(),
   code: `CODE.SUB.${String(i + 1).padStart(3, '0')}`,
   description: `This is a detailed description for error number ${i + 1}. It might involve several components and user actions leading to this specific state. Example text to make it longer than the code itself. `,
@@ -41,9 +58,13 @@ const ErrorListPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(ITEMS_PER_PAGE_OPTIONS[1]); // Default to 10
+  const [currentErrorList, setCurrentErrorList] = useState<ErrorItem[]>(dummyErrors);
+
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [errorToDelete, setErrorToDelete] = useState<ErrorItem | null>(null);
 
   // Filter errors based on search term
-  const filteredErrors = dummyErrors.filter(error =>
+  const filteredErrors = currentErrorList.filter(error =>
     error.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
     error.description.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -70,14 +91,21 @@ const ErrorListPage: React.FC = () => {
     navigate(`/errors/edit/${errorCode}`);
   };
 
-  const handleDelete = (errorCode: string, errorId: string) => {
-    if (window.confirm(`Are you sure you want to delete error code ${errorCode}?`)) {
-      console.log('Deleting error code:', errorCode, 'with ID:', errorId);
-      // Simulate API call for delete
-      // To reflect in UI without real API:
-      // setCurrentErrorList(prev => prev.filter(err => err.id !== errorId));
-      // setCurrentPage(1); // Or adjust to stay on page if items remain
-    }
+  const openDeleteDialog = (error: ErrorItem) => {
+    setErrorToDelete(error);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (!errorToDelete) return;
+    console.log('Deleting error code:', errorToDelete.code, 'with ID:', errorToDelete.id);
+    // Simulate API call for delete
+    // To reflect in UI without real API:
+    // setCurrentErrorList(prev => prev.filter(err => err.id !== errorToDelete.id));
+    // setCurrentPage(1); // Reset to page 1 or adjust as needed
+    // if (currentItems.length === 1 && currentPage > 1) { setCurrentPage(currentPage -1); }
+    setIsDeleteDialogOpen(false);
+    setErrorToDelete(null);
   };
 
   const renderPageNumbers = () => {
@@ -150,6 +178,7 @@ const ErrorListPage: React.FC = () => {
   };
 
   return (
+    <>
     <div className="container mx-auto p-4 lg:p-6 max-w-7xl">
       <div className="flex justify-between items-center mb-6">
         <div>
@@ -218,8 +247,7 @@ const ErrorListPage: React.FC = () => {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => handleEdit(error.code)}>Edit</DropdownMenuItem>
-                        <DropdownMenuItem>Duplicate</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleDelete(error.code, error.id)} className="text-red-600 hover:text-red-600 hover:bg-red-50">Delete</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => openDeleteDialog(error)} className="text-red-600 hover:text-red-600 hover:bg-red-50">Delete</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -273,6 +301,26 @@ const ErrorListPage: React.FC = () => {
         </div>
       )}
     </div>
+
+    {errorToDelete && (
+        <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+            <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the error code <span className="font-semibold text-foreground">{errorToDelete.code}</span>.
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setErrorToDelete(null)}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Delete
+                </AlertDialogAction>
+            </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    )}
+    </>
   );
 };
 
