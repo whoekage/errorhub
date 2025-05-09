@@ -5,6 +5,7 @@ import { AppDataSource } from './db/data-source';
 import { TranslationService } from './services/TranslationService';
 import { CategoryService } from './services/CategoryService';
 import { ErrorService } from './services/ErrorService';
+import { LanguageService } from './services/LanguageService';
 
 // DI container type
 export interface DIContainer {
@@ -16,6 +17,7 @@ export interface DIContainer {
     translation: TranslationService;
     category: CategoryService;
     error: ErrorService;
+    language: LanguageService;
   };
 }
 
@@ -38,11 +40,13 @@ export function createContainer(): DIContainer {
   const translationService = new TranslationService(db);
   const categoryService = new CategoryService(db);
   const errorService = new ErrorService(db);
+  const languageService = new LanguageService(db);
 
   const services = {
     translation: translationService,
     category: categoryService,
     error: errorService,
+    language: languageService,
   };
   
   // Return assembled container

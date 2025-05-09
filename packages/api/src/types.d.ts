@@ -2,6 +2,7 @@ import { DIContainer } from './di';
 import { ErrorService } from './services/ErrorService';
 import { CategoryService } from './services/CategoryService';
 import { TranslationService } from './services/TranslationService';
+import { LanguageService } from './services/LanguageService';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -12,5 +13,6 @@ declare module 'fastify' {
     errorService: ErrorService;
     categoryService: CategoryService;
     translationService: TranslationService;
+    languageService: LanguageService;
   }
 } 

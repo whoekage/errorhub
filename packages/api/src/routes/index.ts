@@ -5,6 +5,7 @@ import { DIContainer } from '@/di';
 import errorRoutes from './errors';
 import categoryRoutes from './categories';
 import translationRoutes from './translations';
+import languageRoutes from './language-routes';
 import { healthCheckRoute, readinessCheckRoute } from './health';
 
 /**
@@ -43,4 +44,10 @@ export default async function (fastify: FastifyInstance) {
     translationRoutes(instance, di);
     done();
   }, { prefix: '/translations' });
+
+  // Register language routes (New registration)
+  fastify.register((instance, opts, done) => {
+    languageRoutes(instance, di);
+    done();
+  }, { prefix: '/settings/languages' });
 } 
