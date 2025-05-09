@@ -224,7 +224,11 @@ const ErrorListPage: React.FC = () => {
           <TableBody>
             {currentItems.length > 0 ? (
               currentItems.map((error) => (
-                <TableRow key={error.id}>
+                <TableRow 
+                  key={error.id} 
+                  onClick={() => handleEdit(error.code)}
+                  className="cursor-pointer hover:bg-muted/50"
+                >
                   <TableCell className="font-medium py-3 px-4">{error.id}</TableCell>
                   <TableCell className="font-medium py-3 px-4">{error.code}</TableCell>
                   <TableCell className="py-3 px-4">{error.description}</TableCell>
