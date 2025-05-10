@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/Button';
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form';
-import { getCategory, updateCategory, Category } from '@/api/categoryService';
+import { getCategory, updateCategory, deleteCategory, Category } from '@/api/categoryService';
 import {
   AlertDialog,
   AlertDialogTrigger,
@@ -34,6 +34,8 @@ const UpdateCategoryPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [category, setCategory] = useState<Category | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const form = useForm<CategoryFormValues>({
     resolver: zodResolver(categorySchema),
@@ -73,8 +75,17 @@ const UpdateCategoryPage: React.FC = () => {
   };
 
   const handleDelete = async () => {
-    // TODO: call deleteCategory API when implemented
-    navigate('/categories');
+    if (!category) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteCategory(category.id);
+      navigate('/categories');
+    } catch (e: unknown) {
+      setDeleteError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   if (isLoading) return <div className="container mx-auto p-4 text-center">Loading category...</div>;
@@ -119,7 +130,7 @@ const UpdateCategoryPage: React.FC = () => {
             <div className="flex justify-between items-center">
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="destructive">Delete</Button>
+                  <Button variant="destructive" disabled={isDeleting}>Delete</Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
@@ -128,12 +139,15 @@ const UpdateCategoryPage: React.FC = () => {
                       Are you sure you want to delete this category? This action cannot be undone.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
+                  {deleteError && <div className="text-red-500 text-sm">{deleteError}</div>}
                   <AlertDialogFooter>
                     <AlertDialogCancel asChild>
-                      <Button variant="outline">Cancel</Button>
+                      <Button variant="outline" disabled={isDeleting}>Cancel</Button>
                     </AlertDialogCancel>
                     <AlertDialogAction asChild>
-                      <Button variant="destructive" onClick={handleDelete}>Delete</Button>
+                      <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+                        {isDeleting ? 'Deleting...' : 'Delete'}
+                      </Button>
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>

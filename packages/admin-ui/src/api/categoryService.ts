@@ -46,3 +46,7 @@ export async function updateCategory(id: number, data: Partial<Omit<Category, 'i
   const response = await api.put<{ data: Category }>(`/categories/${id}`, data);
   return response.data.data;
 }
+
+export async function deleteCategory(id: number): Promise<void> {
+  await api.delete(`/categories/${id}`);
+}
