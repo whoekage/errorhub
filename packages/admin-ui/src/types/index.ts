@@ -16,8 +16,11 @@ export interface ErrorCode {
 }
 
 export interface Category {
-  id: string;
+  id: number;
   name: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // Data structure for the form, especially for create/update operations

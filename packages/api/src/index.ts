@@ -40,7 +40,9 @@ const start = async () => {
     
     // Register plugins
     await fastify.register(fastifyHelmet); // Security
-    await fastify.register(fastifyCors); // CORS
+    await fastify.register(fastifyCors, {
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    }); // CORS
     await fastify.register(fastifyRequestLogger); // Logging
     await fastify.register(fastifySwagger, {
       openapi: {
