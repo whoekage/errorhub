@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { ErrorCodeEntity } from './entities/ErrorCodeEntity';
 import { ErrorTranslationEntity } from './entities/ErrorTranslationEntity';
 import { ErrorCategoryEntity } from './entities/ErrorCategoryEntity';
+import { EnabledLanguageEntity } from './entities/EnabledLanguageEntity';
 import path from 'path';
 import fs from 'fs';
 
@@ -14,7 +15,7 @@ export const AppDataSource = new DataSource({
   database: dbPath,
   synchronize: process.env.NODE_ENV !== 'production', // Automatically create database schema in development
   logging: process.env.NODE_ENV !== 'production',
-  entities: [ErrorCodeEntity, ErrorTranslationEntity, ErrorCategoryEntity],
+  entities: [ErrorCodeEntity, ErrorTranslationEntity, ErrorCategoryEntity, EnabledLanguageEntity],
   migrations: [path.join(__dirname, 'migrations', '*.{ts,js}')],
   subscribers: [],
 });

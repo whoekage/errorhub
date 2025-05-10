@@ -3,97 +3,72 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Badge } from '@/components/ui/badge'; // For displaying selected languages
+import { Badge } from '@/components/ui/badge';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  getEnabledLanguages,
+  enableLanguage,
+  disableLanguage,
+} from '@/api/languageService';
 
-// Initial active languages - this can be fetched or configured in a real app
-const initialActiveI18nCodes: LanguageCode[] = ['kk', 'ky', 'uz', 'ru', 'en']; // used ky instead of kg for consistency
+export interface LanguageInfo {
+  code: string;
+  name: string;
+  native: string;
+  rtl: boolean;
+}
 
-// A more comprehensive list of available languages (code: name)
-// Source: Simplified from common language lists
-const allAvailableLanguages: Record<string, string> = {
-  en: 'English',
-  es: 'Español (Spanish)',
-  fr: 'Français (French)',
-  de: 'Deutsch (German)',
-  it: 'Italiano (Italian)',
-  pt: 'Português (Portuguese)',
-  ru: 'Русский (Russian)',
-  ja: '日本語 (Japanese)',
-  ko: '한국어 (Korean)',
-  zh: '中文 (Chinese)',
-  ar: 'العربية (Arabic)',
-  hi: 'हिन्दी (Hindi)',
-  tr: 'Türkçe (Turkish)',
-  nl: 'Nederlands (Dutch)',
-  sv: 'Svenska (Swedish)',
-  pl: 'Polski (Polish)',
-  cs: 'Čeština (Czech)',
-  el: 'Ελληνικά (Greek)',
-  he: 'עברית (Hebrew)',
-  th: 'ไทย (Thai)',
-  vi: 'Tiếng Việt (Vietnamese)',
-  id: 'Bahasa Indonesia (Indonesian)',
-  ms: 'Bahasa Melayu (Malay)',
-  ro: 'Română (Romanian)',
-  hu: 'Magyar (Hungarian)',
-  fi: 'Suomi (Finnish)',
-  da: 'Dansk (Danish)',
-  no: 'Norsk (Norwegian)',
-  kk: 'Қазақ тілі (Kazakh)',
-  uz: 'Oʻzbek tili (Uzbek)',
-  ky: 'Кыргызча (Kyrgyz)',
-  uk: 'Українська (Ukrainian)',
-  bg: 'Български (Bulgarian)',
-  hr: 'Hrvatski (Croatian)',
-  sr: 'Српски (Serbian)',
-  sk: 'Slovenčina (Slovak)',
-  sl: 'Slovenščina (Slovenian)',
-  et: 'Eesti (Estonian)',
-  lv: 'Latviešu (Latvian)',
-  lt: 'Lietuvių (Lithuanian)',
-  fa: 'فارسی (Persian)',
-};
-
-type LanguageCode = keyof typeof allAvailableLanguages;
+const allLanguages: LanguageInfo[] = [
+  { code: 'en', name: 'English', native: 'English', rtl: false },
+  { code: 'ru', name: 'Russian', native: 'Русский', rtl: false },
+  { code: 'kk', name: 'Kazakh', native: 'Қазақша', rtl: false },
+  { code: 'ky', name: 'Kyrgyz', native: 'Кыргызча', rtl: false },
+  { code: 'uz', name: 'Uzbek', native: "O'zbek", rtl: false },
+  // Add more languages as needed
+];
 
 const LanguagesPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [enabledLanguages, setEnabledLanguages] = useState<Set<LanguageCode>>(
-    new Set(initialActiveI18nCodes)
-  );
+  const queryClient = useQueryClient();
 
-  const handleSwitchChange = (languageCode: LanguageCode, checked: boolean) => {
-    setEnabledLanguages(prev => {
-      const newSet = new Set(prev);
-      if (checked) {
-        newSet.add(languageCode);
-      } else {
-        newSet.delete(languageCode);
-      }
-      console.log(`Language ${languageCode} ${checked ? 'enabled' : 'disabled'}`);
-      return newSet;
-    });
-  };
+  const {
+    data: enabledCodes = [],
+    isLoading,
+    isError,
+    error,
+  } = useQuery<string[], Error>({
+    queryKey: ['enabledLanguages'],
+    queryFn: getEnabledLanguages,
+  });
 
-  const filteredAvailableLanguages = useMemo(() => {
-    return Object.entries(allAvailableLanguages)
-      .filter(([code, name]) => 
-        name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        code.toLowerCase().includes(searchTerm.toLowerCase())
+  const enableMutation = useMutation({
+    mutationFn: enableLanguage,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['enabledLanguages'] }),
+  });
+
+  const disableMutation = useMutation({
+    mutationFn: disableLanguage,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['enabledLanguages'] }),
+  });
+
+  const filteredLanguages = useMemo(() => {
+    return allLanguages
+      .filter((lang: LanguageInfo) =>
+        lang.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        lang.code.toLowerCase().includes(searchTerm.toLowerCase())
       )
-      .sort(([_, nameA], [__, nameB]) => nameA.localeCompare(nameB));
+      .sort((a: LanguageInfo, b: LanguageInfo) => a.name.localeCompare(b.name));
   }, [searchTerm]);
 
-  // Derive the list of active languages for the first card from the enabledLanguages state
-  const activeLanguagesForDisplay = useMemo(() => {
-    return Array.from(enabledLanguages).map(code => ({
-        code,
-        name: allAvailableLanguages[code] || code.toUpperCase()
-    })).sort((a,b) => a.name.localeCompare(b.name)); // Sort for consistent display
-  }, [enabledLanguages]);
+  const enabledLanguages = useMemo(() => {
+    return allLanguages.filter((lang: LanguageInfo) => enabledCodes.includes(lang.code));
+  }, [enabledCodes]);
+
+  if (isLoading) return <div>Loading languages...</div>;
+  if (isError) return <div>Error: {error?.message}</div>;
 
   return (
-    <div className="container mx-auto p-4 lg:p-6 max-w-3xl"> {/* Single column, constrained width */}
+    <div className="container mx-auto p-4 lg:p-6 max-w-3xl">
       <h1 className="text-3xl font-bold mb-6">Language Settings</h1>
 
       <div className="space-y-6">
@@ -105,11 +80,11 @@ const LanguagesPage: React.FC = () => {
             <p className="text-sm text-muted-foreground mb-3">
               These languages are currently enabled for internationalization across the platform.
             </p>
-            <div className="flex flex-wrap gap-2 min-h-[28px]"> {/* Added min-height */}
-              {activeLanguagesForDisplay.length > 0 ? (
-                activeLanguagesForDisplay.map(({ code, name }) => (
-                  <Badge key={code} variant="secondary">
-                    {name}
+            <div className="flex flex-wrap gap-2 min-h-[28px]">
+              {enabledLanguages.length > 0 ? (
+                enabledLanguages.map((lang: LanguageInfo) => (
+                  <Badge key={lang.code} variant="secondary">
+                    {lang.name}
                   </Badge>
                 ))
               ) : (
@@ -134,20 +109,28 @@ const LanguagesPage: React.FC = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="mb-4"
             />
-            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2"> {/* Scrollable list */}
-              {filteredAvailableLanguages.length > 0 ? (
-                filteredAvailableLanguages.map(([code, name]) => (
-                  <div key={code} className="flex items-center justify-between p-3 rounded-md border hover:bg-muted/50">
-                    <Label htmlFor={`lang-switch-${code}`} className="flex-1 cursor-pointer">
-                      {name} <span className="text-xs text-muted-foreground">({code})</span>
-                    </Label>
-                    <Switch
-                      id={`lang-switch-${code}`}
-                      checked={enabledLanguages.has(code as LanguageCode)}
-                      onCheckedChange={(checked) => handleSwitchChange(code as LanguageCode, checked)}
-                    />
-                  </div>
-                ))
+            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+              {filteredLanguages.length > 0 ? (
+                filteredLanguages.map((lang: LanguageInfo) => {
+                  const isEnabled = enabledCodes.includes(lang.code);
+                  return (
+                    <div key={lang.code} className="flex items-center justify-between p-3 rounded-md border hover:bg-muted/50">
+                      <Label htmlFor={`lang-switch-${lang.code}`} className="flex-1 cursor-pointer">
+                        {lang.name} <span className="text-xs text-muted-foreground">({lang.code})</span>
+                      </Label>
+                      <Switch
+                        id={`lang-switch-${lang.code}`}
+                        checked={isEnabled}
+                        onCheckedChange={(checked) =>
+                          checked
+                            ? enableMutation.mutate(lang.code)
+                            : disableMutation.mutate(lang.code)
+                        }
+                        disabled={enableMutation.isPending || disableMutation.isPending}
+                      />
+                    </div>
+                  );
+                })
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-4">No languages found matching your search.</p>
               )}
