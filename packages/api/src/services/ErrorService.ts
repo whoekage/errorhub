@@ -3,7 +3,7 @@ import { DataSource, Repository, FindOptionsRelations } from 'typeorm';
 import { ErrorTranslationEntity, ErrorCodeEntity, ErrorCategoryEntity } from '@/db';
 import pino from 'pino';
 import { PaginationDto } from '@/dto/common/pagination.dto';
-import { keysetPaginate } from '@/utils/pagination';
+import { offsetPaginate } from '@/utils/pagination';
 import { ResourceConflictError, ResourceNotFoundError, ServiceError } from '@/utils/errors';
 
 // Define interfaces within the file to avoid import errors
@@ -69,7 +69,7 @@ export class ErrorService {
   }
   
   async getAll(pagination: PaginationDto, baseUrl: string) {
-    const result = await keysetPaginate<ErrorCodeEntity>(this.errorCodeRepository, {
+    const result = await offsetPaginate<ErrorCodeEntity>(this.errorCodeRepository, {
       ...pagination,
       alias: 'error',
       searchableFields: this.getSearchableFields(),

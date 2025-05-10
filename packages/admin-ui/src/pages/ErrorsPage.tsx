@@ -27,6 +27,11 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { Link } from 'react-router-dom';
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 import { ErrorData } from "@/types";
 
@@ -86,24 +91,34 @@ const ITEMS_PER_PAGE = 5;
 
 export const ErrorsPage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
-
   const totalPages = Math.ceil(mockErrors.length / ITEMS_PER_PAGE);
-
   const currentErrors = mockErrors.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE
   );
-
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-  };
+  const handlePageChange = (page: number) => setCurrentPage(page);
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-        <h1>Error Codes Management</h1>
+    <div className="container mx-auto p-4 lg:p-6 max-w-3xl">
+      {/* Hero-блок */}
+      <Card className="mb-8 bg-background/80 shadow-none border-0 rounded-2xl">
+        <CardHeader>
+          <CardTitle className="text-4xl font-extrabold tracking-tight text-white mb-2">
+            Error Management
+          </CardTitle>
+          <div className="text-lg font-semibold text-white/80 mb-1">
+            Manage your error codes
+          </div>
+          <div className="text-base text-white/70">
+            Create, edit, and organize error codes for your project. Error codes help you standardize and localize error handling across your application.
+          </div>
+        </CardHeader>
+      </Card>
+
+      {/* Section header and entries info */}
+      <div className="flex justify-end mb-4">
         <Link to="/errors/new">
-          <button>Add New Error</button>
+          <Button variant="secondary">Create New Error Code</Button>
         </Link>
       </div>
 
@@ -111,20 +126,20 @@ export const ErrorsPage: React.FC = () => {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[200px]">Code</TableHead>
-              <TableHead>Message</TableHead>
-              <TableHead className="w-[180px]">Category</TableHead>
-              <TableHead className="w-[150px]">Created At</TableHead>
+              <TableHead className="w-[60px]">ID</TableHead>
+              <TableHead className="w-[200px]">Error Code</TableHead>
+              <TableHead>Description (EN)</TableHead>
+              <TableHead className="w-[180px]">Categories</TableHead>
               <TableHead className="text-right w-[80px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {currentErrors.map((error) => (
+            {currentErrors.map((error, idx) => (
               <TableRow key={error.id}>
-                <TableCell className="font-medium">{error.code}</TableCell>
+                <TableCell className="font-medium">{(currentPage - 1) * ITEMS_PER_PAGE + idx + 1}</TableCell>
+                <TableCell className="font-semibold text-primary uppercase">{error.code}</TableCell>
                 <TableCell>{error.message}</TableCell>
                 <TableCell>{error.category}</TableCell>
-                <TableCell>{error.createdAt}</TableCell>
                 <TableCell className="text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -135,21 +150,14 @@ export const ErrorsPage: React.FC = () => {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                      <DropdownMenuItem
-                        onClick={() => console.log(`View ${error.code}`)}
-                      >
+                      <DropdownMenuItem onClick={() => console.log(`View ${error.code}`)}>
                         View Details
                       </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => console.log(`Edit ${error.code}`)}
-                      >
+                      <DropdownMenuItem onClick={() => console.log(`Edit ${error.code}`)}>
                         Edit
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        className="text-red-600 focus:text-red-600 focus:bg-red-50"
-                        onClick={() => console.log(`Delete ${error.code}`)}
-                      >
+                      <DropdownMenuItem className="text-red-600 focus:text-red-600 focus:bg-red-50" onClick={() => console.log(`Delete ${error.code}`)}>
                         Delete
                       </DropdownMenuItem>
                     </DropdownMenuContent>

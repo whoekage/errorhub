@@ -22,7 +22,7 @@ export default function registerErrorRoutes(
       const baseUrl = `${request.protocol}://${request.headers.host}${currentPath}`;
 
       // 🚀 Call the service method
-      const result = await services.error.getAll({ ...request.query, ...pagination }, baseUrl);
+      const result = await services.error.getAll(pagination, baseUrl);
 
       return reply.send(result);
     } catch (error) {

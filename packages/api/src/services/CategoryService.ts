@@ -2,7 +2,7 @@ import { DataSource, Repository } from 'typeorm';
 import { ErrorCategoryEntity, ErrorCodeEntity } from '@/db';
 import { Logger } from 'pino';
 import pino from 'pino';
-import { keysetPaginate } from '@/utils/pagination';
+import { offsetPaginate } from '@/utils/pagination';
 
 // Placeholder types (replace with actual DTOs/Interfaces)
 type CreateCategoryDto = Partial<ErrorCategoryEntity> & { name: string }; // Ensure name is required
@@ -32,11 +32,11 @@ export class CategoryService {
    * Retrieves categories list using keyset pagination (same approach as ErrorService).
    */
   async getAll(query: Record<string, unknown>, baseUrl: string) {
-    const result = await keysetPaginate<ErrorCategoryEntity>(this.errorCategoryRepository, {
+    const result = await offsetPaginate<ErrorCategoryEntity>(this.errorCategoryRepository, {
       ...query,
       alias: 'category',
       searchableFields: this.getSearchableFields(),
-      baseUrl,
+      baseUrl
     });
     return result;
   }

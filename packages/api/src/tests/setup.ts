@@ -3,19 +3,20 @@ import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { beforeAll, afterAll, beforeEach } from 'vitest';
 import Fastify, { FastifyInstance } from 'fastify';
-import { ErrorCodeEntity, ErrorCategoryEntity, ErrorTranslationEntity } from '@/db';
+import { ErrorCodeEntity, ErrorCategoryEntity, ErrorTranslationEntity, LanguageEntity } from '@/db';
 import { errorHandler } from '@/middleware/error-handler';
 import validationPlugin from '@/plugins/validation-plugin';
 import routes from '@/routes/index';
 import { ErrorService } from '@/services/ErrorService';
 import { CategoryService } from '@/services/CategoryService';
 import { TranslationService } from '@/services/TranslationService';
+import { LanguageService } from '@/services/LanguageService';
 
 // Create test database with explicit entity registration
 export const testDataSource = new DataSource({
   type: 'sqlite',
   database: ':memory:',
-  entities: [ErrorCodeEntity, ErrorCategoryEntity, ErrorTranslationEntity],
+  entities: [ErrorCodeEntity, ErrorCategoryEntity, ErrorTranslationEntity, LanguageEntity],
   synchronize: true,
   logging: false
 });
@@ -35,7 +36,8 @@ export async function buildTestApp(): Promise<FastifyInstance> {
   const services = {
     error: new ErrorService(testDataSource),
     category: new CategoryService(testDataSource),
-    translation: new TranslationService(testDataSource)
+    translation: new TranslationService(testDataSource),
+    language: new LanguageService(testDataSource)
   };
   
   // Create test DI container with these services

@@ -1,7 +1,7 @@
-import { Entity, PrimaryColumn, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryColumn, CreateDateColumn, BaseEntity } from 'typeorm';
 
 @Entity('enabled_languages')
-export class EnabledLanguageEntity {
+export class EnabledLanguageEntity extends BaseEntity {
   @PrimaryColumn()
   code: string;
 

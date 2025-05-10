@@ -17,16 +17,17 @@ export default function(fastify: FastifyInstance, { services }: DIContainer) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     async (request: FastifyRequest<{ Querystring: Record<string, any> }>, reply: FastifyReply) => {
       try {
-        // Basic validation of standard query parameters
-        paginationSchema.parse(request.query);
+        // ✅ Validate known pagination query params
+        const pagination = paginationSchema.parse(request.query);
 
-        // Construct base URL for HATEOAS links
-        const baseUrl = `${request.protocol}://${request.hostname}${request.routeOptions.url}`;
-        
-        // Call the standardized service method
-        // Assuming translation service is available under services.translation
-        const result = await services.translation.getAll(request.query, baseUrl);
-        
+        // Build the base URL **including** the full path (without query string) so that
+        // generated pagination links point back to the current endpoint (e.g. "/api/translations")
+        const currentPath = request.raw.url?.split('?')[0] ?? request.url.split('?')[0];
+        const baseUrl = `${request.protocol}://${request.headers.host}${currentPath}`;
+
+        // 🚀 Call the service method
+        const result = await services.translation.getAll(pagination, baseUrl);
+
         return reply.send(result);
 
       } catch (error) {

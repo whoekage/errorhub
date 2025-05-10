@@ -1,7 +1,7 @@
 // TranslationService.ts
 import { DataSource, Repository } from 'typeorm';
 import { ErrorTranslationEntity, ErrorCodeEntity } from '@/db';
-import { keysetPaginate } from '@/utils/pagination';
+import { offsetPaginate } from '@/utils/pagination';
 import { Logger } from 'pino';
 import pino from 'pino';
 // Corrected DTO import and using placeholders for errors
@@ -160,11 +160,11 @@ export class TranslationService {
    * Retrieves translations list using keyset pagination.
    */
   async getAll(query: Record<string, unknown>, baseUrl: string) {
-    const result = await keysetPaginate<ErrorTranslationEntity>(this.errorTranslationRepository, {
+    const result = await offsetPaginate<ErrorTranslationEntity>(this.errorTranslationRepository, {
       ...query,
       alias: 'translation',
       searchableFields: this.getSearchableFields(),
-      baseUrl,
+      baseUrl
     });
     return result;
   }

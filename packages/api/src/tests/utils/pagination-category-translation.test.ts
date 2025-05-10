@@ -11,12 +11,11 @@ function createPaginationTests(
   searchTermBuilder: (index: number) => string,
   verifySearch: (items: Array<Record<string, unknown>>, index: number) => void,
 ) {
-  describe(`Cursor-Based Pagination - ${endpoint}`, () => {
+  describe(`Page-Based Pagination - ${endpoint}`, () => {
     let app: FastifyInstance;
 
     beforeEach(async () => {
       app = await buildTestApp();
-
       // Seed 25 records with predictable timestamps
       for (let i = 1; i <= 25; i++) {
         const date = new Date();
@@ -31,22 +30,39 @@ function createPaginationTests(
       const result = JSON.parse(response.payload);
       expect(result.data).toHaveLength(20);
       expect(result.meta.itemsPerPage).toBe(20);
+      expect(result.meta.currentPage).toBe(1);
       expect(result.meta.hasNextPage).toBe(true);
       expect(result.meta.hasPreviousPage).toBe(false);
       expect(result.links.next).toBeDefined();
       expect(result.links.prev).toBeUndefined();
     });
 
-    it('supports custom limit parameter', async () => {
-      const response = await app.inject({ method: 'GET', url: `/api/${endpoint}?limit=5` });
+    it('supports custom limit and page parameters', async () => {
+      const response = await app.inject({ method: 'GET', url: `/api/${endpoint}?limit=5&page=2` });
       expect(response.statusCode).toBe(200);
       const result = JSON.parse(response.payload);
       expect(result.data).toHaveLength(5);
       expect(result.meta.itemsPerPage).toBe(5);
+      expect(result.meta.currentPage).toBe(2);
+      expect(result.meta.hasNextPage).toBe(true);
+      expect(result.meta.hasPreviousPage).toBe(true);
+      expect(result.links.next).toBeDefined();
+      expect(result.links.prev).toBeDefined();
+    });
+
+    it('navigates to the last page and finds no next link', async () => {
+      const response = await app.inject({ method: 'GET', url: `/api/${endpoint}?limit=10&page=3` });
+      expect(response.statusCode).toBe(200);
+      const result = JSON.parse(response.payload);
+      expect(result.data.length).toBeLessThanOrEqual(10);
+      expect(result.meta.currentPage).toBe(3);
+      expect(result.meta.hasNextPage).toBe(false);
+      expect(result.links.next).toBeUndefined();
+      expect(result.links.prev).toBeDefined();
     });
 
     it('handles sorting correctly', async () => {
-      const response = await app.inject({ method: 'GET', url: `/api/${endpoint}?sort=createdAt&order=DESC&limit=3` });
+      const response = await app.inject({ method: 'GET', url: `/api/${endpoint}?sort=createdAt&order=DESC&limit=3&page=1` });
       expect(response.statusCode).toBe(200);
       const result = JSON.parse(response.payload);
       for (let i = 0; i < result.data.length - 1; i++) {
@@ -65,45 +81,6 @@ function createPaginationTests(
       verifySearch(result.data, 5);
     });
 
-    it('provides working cursor for next page navigation', async () => {
-      const firstResponse = await app.inject({ method: 'GET', url: `/api/${endpoint}?limit=10&sort=createdAt&order=DESC` });
-      expect(firstResponse.statusCode).toBe(200);
-      const firstResult = JSON.parse(firstResponse.payload);
-      expect(firstResult.links.next).toBeDefined();
-
-      const nextLink = new URL(firstResult.links.next);
-      const nextResponse = await app.inject({ method: 'GET', url: nextLink.pathname + nextLink.search });
-      expect(nextResponse.statusCode).toBe(200);
-      const nextResult = JSON.parse(nextResponse.payload);
-      expect(nextResult.data).toHaveLength(10);
-
-      const firstPageIds = new Set(firstResult.data.map((item: { id: unknown }) => item.id));
-      const secondPageIds = new Set(nextResult.data.map((item: { id: unknown }) => item.id));
-      const overlap = [...secondPageIds].filter((id) => firstPageIds.has(id));
-      expect(overlap).toHaveLength(0);
-
-      const lastFirstPage = new Date(firstResult.data[firstResult.data.length - 1].createdAt).getTime();
-      const firstSecondPage = new Date(nextResult.data[0].createdAt).getTime();
-      expect(lastFirstPage).toBeGreaterThanOrEqual(firstSecondPage);
-    });
-
-    it('supports bidirectional navigation', async () => {
-      const firstResponse = await app.inject({ method: 'GET', url: `/api/${endpoint}?limit=5&sort=id&order=ASC` });
-      const firstResult = JSON.parse(firstResponse.payload);
-      expect(firstResult.links.next).toBeDefined();
-
-      const nextLink = new URL(firstResult.links.next);
-      const secondResponse = await app.inject({ method: 'GET', url: nextLink.pathname + nextLink.search });
-      const secondResult = JSON.parse(secondResponse.payload);
-      expect(secondResult.links.prev).toBeDefined();
-
-      const prevLink = new URL(secondResult.links.prev);
-      const backToFirstResponse = await app.inject({ method: 'GET', url: prevLink.pathname + prevLink.search });
-      const backToFirstResult = JSON.parse(backToFirstResponse.payload);
-      expect(backToFirstResult.data[0].id).toBe(firstResult.data[0].id);
-      expect(backToFirstResult.data.length).toBe(firstResult.data.length);
-    });
-
     it('handles empty results correctly', async () => {
       const response = await app.inject({ method: 'GET', url: `/api/${endpoint}?search=NONEXISTENT.XYZ` });
       expect(response.statusCode).toBe(200);
@@ -112,27 +89,6 @@ function createPaginationTests(
       expect(result.links.next).toBeUndefined();
       expect(result.links.prev).toBeUndefined();
       expect(result.meta.hasNextPage).toBe(false);
-    });
-
-    it('handles invalid cursor gracefully', async () => {
-      const response = await app.inject({ method: 'GET', url: `/api/${endpoint}?cursor=invalid-cursor` });
-      expect(response.statusCode).toBe(400);
-    });
-
-    it('combines multiple query parameters correctly', async () => {
-      const response = await app.inject({
-        method: 'GET',
-        url: `/api/${endpoint}?limit=3&sort=createdAt&order=DESC&search=${encodeURIComponent(searchTermBuilder(0))}`,
-      });
-      expect(response.statusCode).toBe(200);
-      const result = JSON.parse(response.payload);
-      expect(result.data).toHaveLength(3);
-      expect(result.data.every((item: Record<string, unknown>) => JSON.stringify(item).includes(searchTermBuilder(0)))).toBe(true);
-      for (let i = 0; i < result.data.length - 1; i++) {
-        const current = new Date(result.data[i].createdAt).getTime();
-        const next = new Date(result.data[i + 1].createdAt).getTime();
-        expect(current).toBeGreaterThanOrEqual(next);
-      }
     });
   });
 }

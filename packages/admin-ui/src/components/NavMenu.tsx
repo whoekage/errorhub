@@ -1,11 +1,11 @@
 import { NavLink } from "react-router-dom";
-import { Home, ListTree, Languages, LayoutGrid, Globe } from "lucide-react";
+import { Home, ListTree, /* Languages, */ LayoutGrid, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const menuItems = [
   { to: "/", label: "Dashboard", Icon: Home },
   { to: "/errors", label: "Errors", Icon: ListTree },
-  { to: "/translations", label: "Translations", Icon: Languages },
+  // { to: "/translations", label: "Translations", Icon: Languages },
   { to: "/categories", label: "Categories", Icon: LayoutGrid },
   { to: "/settings/languages", label: "Language Settings", Icon: Globe },
 ];
