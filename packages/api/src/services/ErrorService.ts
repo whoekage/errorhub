@@ -81,7 +81,9 @@ export class ErrorService {
     });
     return result;
   }
-
+  async getById(id: number): Promise<ErrorCodeEntity | null> {
+    return await this.errorCodeRepository.findOneBy({ id });
+  }
   async getByCode(code: string, options?: GetErrorOptions): Promise<ErrorCodeEntity | null> {
     try {
       const { includeTranslations = false, includeCategories = false } = options || {}; // Changed from includeCategory

@@ -18,7 +18,7 @@ export default function(fastify: FastifyInstance, { services }: DIContainer) {
     Params: z.infer<typeof errorCodeParamSchema>;
     Querystring: Query;
   }>(
-    '/:code',
+    '/code/:code',
     async (request, reply) => {
       try {
         // Validate parameters

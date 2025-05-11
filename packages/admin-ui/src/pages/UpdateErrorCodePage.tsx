@@ -3,6 +3,10 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getErrorCodeById, type CreatedErrorCodeAPIResponse, createErrorCodeAPI as updateErrorCodeAPI, type CreateErrorCodeAPIPayload as UpdateErrorCodeAPIPayload } from '@/api/errorService';
+import { getCategories, type Category, type CategoryListResponse } from '@/api/categoryService';
+import { getEnabledLanguages } from '@/api/languageService';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -10,7 +14,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Badge } from "@/components/ui/badge";
-import { X, Trash2, User, CalendarDays } from "lucide-react"; // Added User and CalendarDays icons
+import { X, Trash2, CalendarDays, Save } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import {
   AlertDialog,
@@ -21,274 +25,373 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  // AlertDialogTrigger, // We'll trigger programmatically
 } from "@/components/ui/alert-dialog";
-import { ErrorStatsCard } from '@/components/ErrorStatsCard'; // Import the new component
+import { ErrorStatsCard } from '@/components/ErrorStatsCard';
+import { useToast } from "@/hooks/use-toast";
 
-// Assuming these are defined and exported from a shared location or CreateErrorCodePage.tsx
-// For now, redefine them here or we can centralize later.
-export const languages = ['kk', 'kg', 'uz', 'ru', 'en'] as const;
-export const categoriesData = [
-  'Authentication', 'Authorization', 'Validation', 'Server', 'Database',
-  'External API', 'Business Logic', 'User Interface', 'Performance', 'Security',
-  'Logging', 'Configuration', 'Deployment', 'Third-Party Integrations'
-];
+export const allPossibleLanguages = ['kk', 'kg', 'uz', 'ru', 'en'] as const;
+type LanguageCode = typeof allPossibleLanguages[number];
+
+const languageDisplayNames: Record<LanguageCode | string, string> = {
+  kk: 'Kazakh',
+  kg: 'Kyrgyz',
+  uz: 'Uzbek',
+  ru: 'Russian',
+  en: 'English'
+};
 
 const translationSchema = z.object(
   Object.fromEntries(
-    languages.map(lang => [lang, z.string().optional()])
-  )
-).refine(translations => {
-  return languages.some(lang => translations[lang] && translations[lang]!.trim() !== '');
+    allPossibleLanguages.map(lang => [lang, z.string().optional()])
+  ) as Record<LanguageCode, z.ZodOptional<z.ZodString>>
+).refine(_translations => {
+  return true;
 }, {
-  message: "At least one translation is required.",
-  path: ["translations"], 
+  message: "At least one translation is required if any are provided.",
+  path: ["translations"],
 });
 
-export const updateErrorCodeSchema = z.object({
-  code: z.string().min(1, { message: "Error Code is required." }),
+export const updateErrorCodeFormSchema = z.object({
+  code: z.string(),
   translations: translationSchema,
-  selectedCategories: z.array(z.string()).min(1, { message: "At least one category must be selected to publish." }),
+  selectedCategories: z.array(z.string()),
+  context: z.string().optional(),
+  status: z.enum(['draft', 'published', 'archived']),
 });
 
-export type UpdateErrorCodeFormValues = z.infer<typeof updateErrorCodeSchema>;
+export type UpdateErrorCodeFormValues = z.infer<typeof updateErrorCodeFormSchema>;
 
-// MockError now correctly uses all fields from UpdateErrorCodeFormValues by extending it,
-// and adds optional meta fields.
-interface MockError extends UpdateErrorCodeFormValues {
-    id: string;
-    createdBy?: string;
+interface MetaInfo {
     createdAt?: string;
-    updatedBy?: string;
     updatedAt?: string;
 }
 
-const allMockErrors: MockError[] = Array.from({ length: 35 }, (_, i) => ({
-    id: (i + 1).toString(),
-    code: `CODE.SUB.${String(i + 1).padStart(3, '0')}`,
-    translations: {
-        en: `English description for CODE.SUB.${String(i + 1).padStart(3, '0')}`,
-        ru: `Русское описание для CODE.SUB.${String(i + 1).padStart(3, '0')}`,
-        // Ensure all languages from the schema have a key, even if empty
-        kk: '',
-        kg: '',
-        uz: '',
-    },
-    // Use selectedCategories as per UpdateErrorCodeFormValues
-    selectedCategories: i % 3 === 0 ? ['General', 'System'] : i % 2 === 0 ? ['User', 'Input'] : ['Data', 'Backend'],
-    createdBy: "Sharkaev Phail",
-    createdAt: new Date(Date.now() - (i + 1) * 24 * 60 * 60 * 1000).toISOString(),
-    updatedBy: "Sharkaev Phail",
-    updatedAt: new Date(Date.now() - i * 12 * 60 * 60 * 1000).toISOString(),
-}));
-
-interface MetaInfo {
-    createdBy: string;
-    createdAt: string;
-    updatedBy: string;
-    updatedAt: string;
-}
-
 const UpdateErrorCodePage: React.FC = () => {
-  const { errorCodeParam } = useParams<{ errorCodeParam: string }>();
+  const { id: idFromParams } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(true);
-  const [errorNotFound, setErrorNotFound] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false); // State for AlertDialog
-  const [metaInfo, setMetaInfo] = useState<MetaInfo | null>(null); // State for meta info
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [metaInfo, setMetaInfo] = useState<MetaInfo | null>(null);
+  const [categorySearch, setCategorySearch] = useState('');
+
+  const numericId = idFromParams ? parseInt(idFromParams, 10) : undefined;
 
   const form = useForm<UpdateErrorCodeFormValues>({
-    resolver: zodResolver(updateErrorCodeSchema),
-    // defaultValues will be set by useEffect after fetching data
+    resolver: zodResolver(updateErrorCodeFormSchema),
   });
 
-  const { control, handleSubmit, setValue, watch, reset, formState: { errors, isSubmitting } } = form;
+  const { control, handleSubmit, setValue, watch, reset, setError, formState: { errors, isSubmitting: isFormSubmitting } } = form;
+
+  const { 
+    data: errorCodeData, 
+    isLoading: isLoadingErrorCode, 
+    isError: isErrorErrorCode,
+    error: errorCodeLoadingError 
+  } = useQuery<CreatedErrorCodeAPIResponse, Error>({
+    queryKey: ['errorCode', numericId],
+    queryFn: () => {
+      if (!numericId) throw new Error("Error code ID is missing");
+      return getErrorCodeById(numericId);
+    },
+    enabled: !!numericId,
+    retry: false,
+  });
+
+  const {
+    data: categoriesResponse,
+    isLoading: isLoadingCategories,
+  } = useQuery<CategoryListResponse, Error>({
+    queryKey: ['allCategoriesForUpdate'],
+    queryFn: () => getCategories({ limit: 1000 }),
+  });
+  const allFetchedCategories: Category[] = categoriesResponse?.data || [];
+
+  const {
+    data: enabledLanguages = [],
+    isLoading: isLoadingLanguages,
+  } = useQuery<string[], Error>({
+    queryKey: ['enabledLanguagesForUpdate'],
+    queryFn: getEnabledLanguages,
+  });
 
   useEffect(() => {
-    if (errorCodeParam) {
-      setIsLoading(true);
-      setTimeout(() => {
-        const existingError = allMockErrors.find(err => err.code === errorCodeParam);
-        if (existingError) {
-          // Form values directly from existingError which matches UpdateErrorCodeFormValues structure for these fields
-          const formValues: UpdateErrorCodeFormValues = {
-            code: existingError.code,
-            translations: existingError.translations, // Directly use if structure matches
-            selectedCategories: existingError.selectedCategories, // Use selectedCategories
-          };
-          reset(formValues);
-          setMetaInfo({
-            createdBy: existingError.createdBy || 'N/A',
-            createdAt: existingError.createdAt ? new Date(existingError.createdAt).toLocaleString() : 'N/A',
-            updatedBy: existingError.updatedBy || 'N/A',
-            updatedAt: existingError.updatedAt ? new Date(existingError.updatedAt).toLocaleString() : 'N/A',
-          });
-          setErrorNotFound(false);
-        } else {
-          setErrorNotFound(true);
-          setMetaInfo(null);
-        }
-        setIsLoading(false);
-      }, 500);
+    if (errorCodeData) {
+      const formValues: UpdateErrorCodeFormValues = {
+        code: errorCodeData.code,
+        translations: {},
+        selectedCategories: errorCodeData.categories?.map(cat => cat.name) || [],
+        context: errorCodeData.context || '',
+        status: errorCodeData.status,
+      };
+
+      const currentTranslations: Record<string, string> = {};
+      allPossibleLanguages.forEach(lang => {
+        const foundTranslation = errorCodeData.translations?.find(t => t.language === lang);
+        currentTranslations[lang] = foundTranslation ? foundTranslation.message : '';
+      });
+      formValues.translations = currentTranslations;
+
+      reset(formValues);
+
+      setMetaInfo({
+        createdAt: errorCodeData.createdAt ? new Date(errorCodeData.createdAt).toLocaleString() : 'N/A',
+        updatedAt: errorCodeData.updatedAt ? new Date(errorCodeData.updatedAt).toLocaleString() : 'N/A',
+      });
     }
-  }, [errorCodeParam, reset]);
+  }, [errorCodeData, reset]);
+  
+  const updateMutation = useMutation({
+    mutationFn: (data: UpdateErrorCodeAPIPayload) => {
+      if (!numericId) throw new Error("Missing ID for update");
+      return updateErrorCodeAPI(numericId, data);
+    },
+    onSuccess: (updatedData: CreatedErrorCodeAPIResponse) => {
+      toast({ title: "Success", description: `Error code ${updatedData.code} updated successfully!`});
+      queryClient.invalidateQueries({ queryKey: ['errorCode', numericId] });
+      queryClient.invalidateQueries({ queryKey: ['errorCodesList'] });
+    },
+    onError: (error: Error) => {
+      toast({ variant: "destructive", title: "Error", description: `Failed to update error code: ${error.message}`});
+      setError("root.serverError", { type: "APIError", message: error.message });
+    }
+  });
 
   const onSubmit = (data: UpdateErrorCodeFormValues) => {
-    console.log('Update submitted:', data);
-    // Simulate API call
-    return new Promise((resolve) => {
-        setTimeout(() => {
-            console.log('Successfully updated error code:', data.code);
-            navigate('/errors'); // Navigate back to list after update
-            resolve(true);
-        }, 1000);
+    console.log('Update submitted data:', data);
+    if (!numericId) {
+        toast({ variant: "destructive", title: "Error", description: "Error ID is missing, cannot update."});
+        return;
+    }
+
+    const payload: UpdateErrorCodeAPIPayload = {
+        translations: {},
+        categoryIds: [],
+        context: data.context || undefined,
+        status: data.status,
+    };
+    
+    const languagesToConsider: readonly LanguageCode[] = enabledLanguages.length > 0 ? enabledLanguages as LanguageCode[] : allPossibleLanguages;
+    languagesToConsider.forEach(lang => {
+        if (data.translations[lang] && data.translations[lang]!.trim() !== '') {
+            payload.translations[lang] = data.translations[lang]!;
+        }
     });
+
+    if (allFetchedCategories && data.selectedCategories) {
+        payload.categoryIds = data.selectedCategories
+            .map(selectedName => {
+                const foundCategory = allFetchedCategories.find(cat => cat.name === selectedName);
+                return foundCategory ? foundCategory.id.toString() : undefined;
+            })
+            .filter((id): id is string => id !== undefined);
+    }
+    
+    console.log('Payload to API:', payload);
+    updateMutation.mutate(payload);
   };
 
   const confirmDelete = () => {
-    console.log('Deleting error code:', errorCodeParam);
-    // Simulate API call for delete
-    setIsDeleteDialogOpen(false); // Close dialog
-    navigate('/errors'); // Navigate after simulated delete
+    console.log('Deleting error code ID:', numericId);
+    toast({ title: "Info", description: `Deletion for ${numericId} (not implemented yet).` });
+    setIsDeleteDialogOpen(false);
   };
-  
-  const [categorySearch, setCategorySearch] = useState('');
-  const selectedCategories = watch('selectedCategories');
-  const filteredCategories = categoriesData.filter(category => 
-    category.toLowerCase().includes(categorySearch.toLowerCase())
+
+  const selectedCategoriesWatched = watch('selectedCategories');
+
+  const filteredSystemCategories = allFetchedCategories.filter(category =>
+    category.name.toLowerCase().includes(categorySearch.toLowerCase())
   );
+
   const removeCategory = (categoryToRemove: string) => {
-    const currentValues = selectedCategories || [];
-    setValue('selectedCategories', currentValues.filter(value => value !== categoryToRemove), { shouldValidate: true });
+    const currentValues = selectedCategoriesWatched || [];
+    setValue('selectedCategories',
+             currentValues.filter(value => value !== categoryToRemove),
+             { shouldValidate: true });
   };
+
+  const isLoading = isLoadingErrorCode || isLoadingCategories || isLoadingLanguages;
+  const isProcessing = isFormSubmitting || updateMutation.isPending;
 
   if (isLoading) {
     return <div className="container mx-auto p-4 text-center">Loading error details...</div>;
   }
 
-  if (errorNotFound) {
-    return <div className="container mx-auto p-4 text-center text-red-500">Error code {errorCodeParam} not found. <Link to="/errors" className="underline">Go back to list</Link></div>;
+  if (isErrorErrorCode || !errorCodeData) {
+    const errorMsg = errorCodeLoadingError?.message || `Error code with ID ${numericId} not found.`;
+    return (
+      <div className="container mx-auto p-4 text-center text-destructive">
+        {errorMsg} <Link to="/errors" className="underline">Go back to list</Link>
+      </div>
+    );
   }
 
   return (
     <>
       <div className="container mx-auto p-4 max-w-6xl">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold">Update Error Code: <span className="text-primary">{errorCodeParam}</span></h1>
-          <div className="flex gap-2">
-              <Button variant="destructive" onClick={() => setIsDeleteDialogOpen(true)} disabled={isSubmitting}> 
-                  <Trash2 className="mr-2 h-4 w-4" /> Delete
-              </Button>
-              <Button type="submit" form="update-error-code-form" disabled={isSubmitting} >
-              {isSubmitting ? 'Saving...' : 'Save Changes'}
-              </Button>
-          </div>
+        <div className="flex justify-between items-center mb-2">
+          <h1 className="text-3xl font-bold">Update Error Message</h1>
         </div>
+        <p className="text-sm text-muted-foreground mb-6">Modify the details of your error code. Fields with * are required.</p>
+
         <Form {...form}>
           <form id="update-error-code-form" onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Card className="md:col-span-2">
-              <CardHeader><CardTitle>Error Details</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                <FormField control={control} name="code" render={({ field }) => ( <FormItem> <FormLabel>Error Code* (Read-only)</FormLabel> <FormControl><Input placeholder="e.g., AUTH.01" {...field} readOnly className="bg-muted/50" /></FormControl> <FormDescription>Unique code for the error. Cannot be changed.</FormDescription> <FormMessage /> </FormItem> )}/>
-                {languages.map((lang) => (
-                  <FormField key={lang} control={control} name={`translations.${lang}`} render={({ field }) => ( <FormItem> <FormLabel>Translation: {lang.toUpperCase()}</FormLabel> <FormControl><Textarea placeholder={`Enter translation for ${lang.toUpperCase()}`} {...field} value={field.value || ''} /></FormControl> <FormMessage /> </FormItem> )}/>
-                ))}
+              <CardHeader>
+                <CardTitle>Error Code: <span className="text-primary">{errorCodeData.code}</span></CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <FormField control={control} name="code" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Error Identifier (Read-only)</FormLabel>
+                    <FormControl><Input {...field} readOnly className="bg-muted/50" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}/>
+
+                <FormField control={control} name="context" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Context (Optional)</FormLabel>
+                    <FormControl><Textarea placeholder="Optional: Provide context for this error..." {...field} value={field.value || ''} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}/>
+                
+                <FormField control={control} name="status" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Status*</FormLabel>
+                        <FormControl>
+                            <select {...field} className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                                <option value="draft">Draft</option>
+                                <option value="published">Published</option>
+                                <option value="archived">Archived</option>
+                            </select>
+                        </FormControl>
+                        <FormDescription>Set the current status of the error code.</FormDescription>
+                        <FormMessage />
+                    </FormItem>
+                )}/>
+
+                {isLoadingLanguages && <p>Loading language fields...</p>}
+                {(enabledLanguages.length > 0 ? enabledLanguages : allPossibleLanguages).map((lang) => {
+                    const langCode = lang as LanguageCode;
+                    return (
+                        <FormField
+                            key={langCode}
+                            control={control}
+                            name={`translations.${langCode}`}
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>{languageDisplayNames[langCode] || langCode.toUpperCase()} Translation</FormLabel>
+                                    <FormControl><Textarea placeholder={`Translation for ${languageDisplayNames[langCode] || langCode.toUpperCase()}`} {...field} value={field.value || ''} /></FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                    );
+                })}
                 {errors.translations && typeof errors.translations.message === 'string' && (
                    <p className="text-sm font-medium text-destructive">{errors.translations.message}</p>
+                )}
+                 {errors.root?.serverError && (
+                    <p className="text-sm font-medium text-destructive mt-2">
+                        {errors.root.serverError.message}
+                    </p>
                 )}
               </CardContent>
             </Card>
 
-            {/* Right Column for Meta and Categories */}
-            <div className="md:col-span-1 space-y-6"> {/* Wrapper for right column cards */}
-                {metaInfo && (
-                    <Card>
-                        <CardHeader><CardTitle>Meta Information</CardTitle></CardHeader>
-                        <CardContent className="space-y-3 text-sm">
-                            <div className="flex items-center">
-                                <User className="h-4 w-4 mr-2 text-muted-foreground" />
-                                <span><span className="font-semibold">Created by:</span> {metaInfo.createdBy}</span>
-                            </div>
-                            <div className="flex items-center">
-                                <CalendarDays className="h-4 w-4 mr-2 text-muted-foreground" />
-                                <span><span className="font-semibold">Created at:</span> {metaInfo.createdAt}</span>
-                            </div>
-                            <div className="flex items-center">
-                                <User className="h-4 w-4 mr-2 text-muted-foreground" />
-                                <span><span className="font-semibold">Updated by:</span> {metaInfo.updatedBy}</span>
-                            </div>
-                            <div className="flex items-center">
-                                <CalendarDays className="h-4 w-4 mr-2 text-muted-foreground" />
-                                <span><span className="font-semibold">Updated at:</span> {metaInfo.updatedAt}</span>
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
-
-                {/* Add the new ErrorStatsCard here */}
-                {errorCodeParam && <ErrorStatsCard errorCode={errorCodeParam} />}
-
+            <div className="md:col-span-1 space-y-6">
+              {metaInfo && (
                 <Card>
-                    <CardHeader><CardTitle>Select Categories*</CardTitle></CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <Label className="text-sm font-medium">Selected:</Label>
-                            <div className="flex flex-wrap gap-1 min-h-[40px] rounded-md border border-input bg-background p-2">
-                                {selectedCategories?.length === 0 && <span className="text-xs text-muted-foreground">No categories selected</span>}
-                                {selectedCategories?.map((category) => (
-                                    <Badge key={category} variant="secondary">
-                                        {category}
-                                        <button type="button" className="ml-1 rounded-full outline-none ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2" onClick={() => removeCategory(category)}>
-                                            <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
-                                        </button>
-                                    </Badge>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="category-search">Search Categories</Label>
-                            <Input id="category-search" placeholder="Search..." value={categorySearch} onChange={(e) => setCategorySearch(e.target.value)} />
-                        </div>
-                        <FormField
-                            control={control}
-                            name="selectedCategories"
-                            render={({ field }) => (
-                            <FormItem className="mt-4 border rounded-md p-4">
-                                <div className="mb-4">
-                                    <FormLabel className="text-base font-semibold">Available Categories</FormLabel>
-                                </div>
-                                {filteredCategories.map((category) => (
-                                <FormItem key={`pub-cat-${category}`} className="flex flex-row items-center space-x-3 space-y-0 mb-2">
-                                    <FormControl>
-                                    <Checkbox checked={field.value?.includes(category)} onCheckedChange={(checked) => { const currentValues = field.value || []; if (checked) { setValue('selectedCategories', [...currentValues, category], { shouldValidate: true }); } else { setValue('selectedCategories', currentValues.filter(value => value !== category), { shouldValidate: true }); } }} />
-                                    </FormControl>
-                                    <FormLabel className="font-normal cursor-pointer">{category}</FormLabel>
-                                </FormItem>
-                                ))}
-                                {filteredCategories.length === 0 && categorySearch && (
-                                <p className="text-sm text-muted-foreground">No categories found matching "{categorySearch}".</p>
-                                )}
-                                <FormMessage /> 
-                            </FormItem>
-                            )}
-                        />
-                    </CardContent>
+                  <CardHeader><CardTitle>Meta Information</CardTitle></CardHeader>
+                  <CardContent className="space-y-3 text-sm">
+                    <div className="flex items-center"><CalendarDays className="h-4 w-4 mr-2 text-muted-foreground" /><span><span className="font-semibold">Created at:</span> {metaInfo.createdAt}</span></div>
+                    <div className="flex items-center"><CalendarDays className="h-4 w-4 mr-2 text-muted-foreground" /><span><span className="font-semibold">Updated at:</span> {metaInfo.updatedAt}</span></div>
+                    <div className="flex items-center"><CalendarDays className="h-4 w-4 mr-2 text-muted-foreground" /><span><span className="font-semibold">Current Status:</span> <Badge variant={errorCodeData.status === 'published' ? 'default' : errorCodeData.status === 'archived' ? 'outline' : 'secondary'}>{errorCodeData.status}</Badge></span></div>
+                  </CardContent>
                 </Card>
+              )}
+
+              {errorCodeData.code && <ErrorStatsCard errorCode={errorCodeData.code} />}
+
+              <Card>
+                <CardHeader><CardTitle>Categorize Your Error</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Selected:</Label>
+                    <div className="flex flex-wrap gap-1 min-h-[40px] rounded-md border border-input bg-background p-2">
+                      {selectedCategoriesWatched?.length === 0 && <span className="text-xs text-muted-foreground">No categories selected</span>}
+                      {selectedCategoriesWatched?.map((categoryName) => (
+                        <Badge key={categoryName} variant="secondary">
+                          {categoryName}
+                          <button type="button" className="ml-1 rounded-full outline-none ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2" onClick={() => removeCategory(categoryName)}>
+                            <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                     {errors.selectedCategories && <p className="text-sm font-medium text-destructive">{errors.selectedCategories.message}</p>}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="category-search-update">Find relevant categories</Label>
+                    <Input id="category-search-update" placeholder="Search categories..." value={categorySearch} onChange={(e) => setCategorySearch(e.target.value)} disabled={isLoadingCategories} />
+                  </div>
+
+                  <FormField control={control} name="selectedCategories" render={({ field }) => (
+                    <FormItem className="mt-4 border rounded-md p-4 space-y-2 max-h-60 overflow-y-auto">
+                      <div className="mb-2"><FormLabel className="text-base font-semibold">Available Categories</FormLabel></div>
+                      {isLoadingCategories && <p>Loading categories...</p>}
+                      {!isLoadingCategories && allFetchedCategories.length === 0 && <p className="text-muted-foreground">No categories available.</p>}
+                      {!isLoadingCategories && filteredSystemCategories.map((category) => (
+                        <FormItem key={category.id} className="flex flex-row items-start space-x-3 space-y-0">
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value?.includes(category.name)}
+                              onCheckedChange={(checked) => {
+                                const currentValues = field.value || [];
+                                setValue('selectedCategories',
+                                  checked ? [...currentValues, category.name] : currentValues.filter(value => value !== category.name),
+                                  { shouldValidate: true }
+                                );
+                              }}
+                            />
+                          </FormControl>
+                          <Label htmlFor={`category-${category.id}`} className="font-normal cursor-pointer">{category.name}</Label>
+                        </FormItem>
+                      ))}
+                      {!isLoadingCategories && filteredSystemCategories.length === 0 && categorySearch && (
+                        <p className="text-sm text-muted-foreground">No categories found matching "{categorySearch}".</p>
+                      )}
+                    </FormItem>
+                  )}/>
+                </CardContent>
+              </Card>
+
+                <div className="flex flex-col space-y-2">
+                    <Button type="submit" form="update-error-code-form" disabled={isProcessing}>
+                        <Save className="mr-2 h-4 w-4" /> {isProcessing ? 'Saving...' : 'Save Changes'}
+                    </Button>
+                    <Button variant="destructive" onClick={() => setIsDeleteDialogOpen(true)} disabled={isProcessing}>
+                        <Trash2 className="mr-2 h-4 w-4" /> Delete Error Code
+                    </Button>
+                    <Button variant="outline" onClick={() => navigate('/errors')} disabled={isProcessing}>
+                        Cancel
+                    </Button>
+                </div>
             </div>
           </form>
         </Form>
       </div>
 
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        {/* <AlertDialogTrigger asChild>
-          <Button variant="outline">Show Dialog</Button> // Not needed, triggering via state
-        </AlertDialogTrigger> */}
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the error code 
-              <span className="font-semibold text-foreground">{errorCodeParam}</span> and all of its associated translations.
+              This action cannot be undone. This will permanently delete the error code
+              <span className="font-semibold text-foreground"> {errorCodeData?.code}</span> and all associated data.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

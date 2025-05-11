@@ -8,6 +8,7 @@ import create from './create';
 import update from './update';
 import deleteError from './delete';
 import getByCategory from './get-by-category';
+import getById from './get-by-id';
 
 /**
  * Register all error-related routes
@@ -15,6 +16,9 @@ import getByCategory from './get-by-category';
 export default function (fastify: FastifyInstance, di: DIContainer) {
   // Get error by code
   getByCode(fastify, di);
+  
+  // Get error by ID
+  getById(fastify, di);
   
   // Get all errors
   getAll(fastify, di);

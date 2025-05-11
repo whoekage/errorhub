@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { useQuery } from '@tanstack/react-query';
 import { getEnabledLanguages } from '@/api/languageService';
 import { getCategories, type Category, type CategoryListResponse } from '@/api/categoryService';
+import { useNavigate } from 'react-router-dom';
+import { createErrorCodeAPI, type CreatedErrorCodeAPIResponse } from '@/api/errorService';
 
 // shadcn/ui components (ensure these are added to your project)
 import { Button } from '@/components/ui/Button';
@@ -20,6 +22,9 @@ import { Label } from "@/components/ui/label";
 // Dummy data and schema (assuming they are in a utility file or defined here for now)
 // For a real app, move these to appropriate locations e.g., @/lib/data, @/lib/schemas
 
+// Интерфейс для ответа от API при создании
+// interface CreatedErrorCodeResponse { ... }
+
 export const allPossibleLanguages = ['kk', 'kg', 'uz', 'ru', 'en'] as const;
 
 // Helper to get full language name
@@ -34,35 +39,40 @@ const languageDisplayNames: Record<typeof allPossibleLanguages[number] | string,
 const translationSchema = z.object(
   Object.fromEntries(
     allPossibleLanguages.map(lang => [lang, z.string().optional()])
-  )
-).refine(translations => {
-  return allPossibleLanguages.some(lang => translations[lang] && translations[lang]!.trim() !== '');
-}, {
-  message: "At least one translation is required.",
-  path: ["translations"], // Specify path for refine error to appear at a general level if desired
+  ) as Record<typeof allPossibleLanguages[number] | string, z.ZodOptional<z.ZodString>>
+);
+
+export const createErrorCodeAPISchema = z.object({
+  code: z.string().min(1, { message: "Error Identifier is required." }),
+  translations: z.record(z.string()),
+  categoryIds: z.array(z.string()),
+  context: z.string().optional(),
 });
 
-export const createErrorCodeSchema = z.object({
+export const createErrorCodeFormSchema = z.object({
   code: z.string().min(1, { message: "Error Identifier is required." }),
   translations: translationSchema,
-  selectedCategories: z.array(z.string()).min(1, { message: "Select at least one category below." }),
+  selectedCategories: z.array(z.string()),
+  context: z.string().optional(),
 });
 
-export type CreateErrorCodeFormValues = z.infer<typeof createErrorCodeSchema>;
+export type CreateErrorCodeFormValues = z.infer<typeof createErrorCodeFormSchema>;
 
 export const defaultValues: CreateErrorCodeFormValues = {
   code: '',
   translations: Object.fromEntries(allPossibleLanguages.map(lang => [lang, ''])) as Record<typeof allPossibleLanguages[number], string>,
   selectedCategories: [],
+  context: '',
 };
 
 const CreateErrorCodePage: React.FC = () => {
+  const navigate = useNavigate();
   const form = useForm<CreateErrorCodeFormValues>({
-    resolver: zodResolver(createErrorCodeSchema),
-    defaultValues: defaultValues,
+    resolver: zodResolver(createErrorCodeFormSchema),
+    defaultValues: defaultValues as CreateErrorCodeFormValues,
   });
 
-  const { control, handleSubmit, setValue, watch, formState: { errors, isSubmitting } } = form;
+  const { control, handleSubmit, setValue, watch, setError, formState: { errors, isSubmitting } } = form;
 
   // Fetch enabled languages
   const {
@@ -86,17 +96,81 @@ const CreateErrorCodePage: React.FC = () => {
 
   const allFetchedCategories: Category[] = categoriesResponse?.data || [];
 
-  const onSubmit = (data: CreateErrorCodeFormValues) => {
-    console.log('Form submitted:', data);
+  const onSubmit = async (data: CreateErrorCodeFormValues) => {
+    console.log('CreateErrorCodePage onSubmit triggered. Form data:', data);
+
     const translationsToSubmit: Record<string, string> = {};
-    for (const lang of enabledLanguages) {
-      if (data.translations[lang as typeof allPossibleLanguages[number]]) {
-        translationsToSubmit[lang] = data.translations[lang as typeof allPossibleLanguages[number]]!;
+    const languagesToConsider: readonly typeof allPossibleLanguages[number][] = enabledLanguages.length > 0 ? enabledLanguages as typeof allPossibleLanguages[number][] : allPossibleLanguages;
+
+    languagesToConsider.forEach(lang => {
+      if (data.translations[lang] && data.translations[lang]!.trim() !== '') {
+        translationsToSubmit[lang] = data.translations[lang]!;
+      }
+    });
+    
+    const categoryIdsToSubmit: string[] = [];
+    if (allFetchedCategories && data.selectedCategories) {
+      data.selectedCategories.forEach(selectedName => {
+        const foundCategory = allFetchedCategories.find(cat => cat.name === selectedName);
+        if (foundCategory) {
+          categoryIdsToSubmit.push(foundCategory.id.toString());
+        }
+      });
+    }
+
+    const dataToSubmitForAPI = {
+      code: data.code,
+      translations: translationsToSubmit,
+      categoryIds: categoryIdsToSubmit,
+      context: data.context || undefined,
+    };
+
+    // Валидация данных перед отправкой через API схему (опционально, но полезно)
+    try {
+      createErrorCodeAPISchema.parse(dataToSubmitForAPI);
+    } catch (validationError) {
+      if (validationError instanceof z.ZodError) {
+        console.error("API Data Validation Error:", validationError.flatten().fieldErrors);
+        setError("root.serverError", { message: "Data prepared for API is invalid. Check console."});
+        return;
       }
     }
-    const dataToSubmit = { ...data, translations: translationsToSubmit };
-    console.log('Filtered data to submit:', dataToSubmit);
-    return new Promise((resolve) => setTimeout(resolve, 1000));
+    
+    console.log('Data to submit to API:', dataToSubmitForAPI);
+
+    try {
+      // Используем CreatedErrorCodeAPIResponse для типа ответа
+      const createdErrorCode: CreatedErrorCodeAPIResponse = await createErrorCodeAPI(dataToSubmitForAPI);
+      
+      console.log('Successfully created error code via API:', createdErrorCode);
+      // Изменяем навигацию на ID
+      navigate(`/errors/update/${createdErrorCode.id}`); 
+
+    } catch (apiError: unknown) {
+      console.error('Failed to create error code via API:', apiError);
+      let errorMessage = "An unexpected error occurred while saving.";
+      let errorType = "APIError";
+      if (typeof apiError === 'object' && apiError !== null && 
+          'response' in apiError && 
+          (apiError as { response?: unknown }).response && 
+          typeof (apiError as { response: unknown }).response === 'object' && 
+          (apiError as { response: object | null }).response !== null &&
+          'data' in (apiError as { response: { data?: unknown } }).response &&
+          (apiError as { response: { data?: unknown } }).response.data &&
+          typeof (apiError as { response: { data: unknown } }).response.data === 'object' &&
+          (apiError as { response: { data: object | null } }).response.data !== null
+          ) {
+        const errorData = (apiError as { response: { data: { message?: string; error?: string } } }).response.data;
+        errorMessage = typeof errorData.message === 'string' ? errorData.message : errorMessage;
+        errorType = typeof errorData.error === 'string' ? errorData.error : errorType;
+      } else if (apiError instanceof Error) { 
+        errorMessage = apiError.message;
+      }
+      setError("root.serverError", { 
+          type: errorType, 
+          message: errorMessage 
+      });
+    }
   };
 
   // State for category search filter
@@ -137,6 +211,8 @@ const CreateErrorCodePage: React.FC = () => {
             <CardContent className="space-y-6">
               <FormField control={control} name="code" render={({ field }) => ( <FormItem> <FormLabel>Error Identifier*</FormLabel> <FormControl><Input placeholder="e.g., AUTH.LOGIN_FAILED" {...field} /></FormControl> <FormDescription>Use format DOMAIN.ACTION_RESULT (e.g., AUTH.LOGIN_FAILED)</FormDescription> <FormMessage /> </FormItem> )}/>
               
+              <FormField control={control} name="context" render={({ field }) => ( <FormItem> <FormLabel>Context (Optional)</FormLabel> <FormControl><Textarea placeholder="Optional: Provide context for this error..." {...field} value={field.value || ''} /></FormControl> <FormMessage /> </FormItem> )}/>
+
               {isLoadingLanguages && <p>Loading language fields...</p>}
               {isErrorLanguages && <p className="text-destructive">Error loading languages. Please try again.</p>}
               {!isLoadingLanguages && !isErrorLanguages && enabledLanguages.length === 0 && <p className="text-muted-foreground">No languages enabled. Please enable languages in settings.</p>}
@@ -144,11 +220,16 @@ const CreateErrorCodePage: React.FC = () => {
               {!isLoadingLanguages && !isErrorLanguages && enabledLanguages.map((lang) => {
                 const fullLangName = languageDisplayNames[lang] || lang.toUpperCase();
                 return (
-                  <FormField key={lang} control={control} name={`translations.${lang}`} render={({ field }) => ( <FormItem> <FormLabel>{fullLangName} Translation</FormLabel> <FormControl><Textarea placeholder={`How this error appears to ${fullLangName}-speaking users`} {...field} value={field.value || ''} /></FormControl> <FormMessage /> </FormItem> )}/>
+                  <FormField key={lang} control={control} name={`translations.${lang as typeof allPossibleLanguages[number]}`} render={({ field }) => ( <FormItem> <FormLabel>{fullLangName} Translation {enabledLanguages.length === 0 && '(Default Fallback)'}</FormLabel> <FormControl><Textarea placeholder={`How this error appears to ${fullLangName}-speaking users`} {...field} value={field.value || ''} /></FormControl> <FormMessage /> </FormItem> )}/>
                 );
               })}
               {errors.translations && typeof errors.translations.message === 'string' && (
                  <p className="text-sm font-medium text-destructive">{errors.translations.message}</p>
+              )}
+              {errors.root?.serverError && (
+                <p className="text-sm font-medium text-destructive mt-2">
+                    {errors.root.serverError.message}
+                </p>
               )}
             </CardContent>
           </Card>
