@@ -19,3 +19,4 @@ export const initializeDatabase = async () => {
 export * from './entities/ErrorCodeEntity';
 export * from './entities/ErrorTranslationEntity';
 export * from './entities/ErrorCategoryEntity'; 
+export * from './entities/EnabledLanguageEntity';

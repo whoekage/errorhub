@@ -1,11 +1,15 @@
 import { DataSource } from 'typeorm';
 import { AppDataSource } from './db/data-source';
 
-// Import service classes and interfaces
+// Import service classes
 import { TranslationService } from './services/TranslationService';
 import { CategoryService } from './services/CategoryService';
 import { ErrorService } from './services/ErrorService';
 import { LanguageService } from './services/LanguageService';
+
+// Import UseCase classes
+import { CreateErrorCodeUseCase } from './use-cases/error-code/CreateErrorCodeUseCase';
+import { UpdateErrorCodeUseCase } from './use-cases/error-code/UpdateErrorCodeUseCase';
 
 // DI container type
 export interface DIContainer {
@@ -18,6 +22,12 @@ export interface DIContainer {
     category: CategoryService;
     error: ErrorService;
     language: LanguageService;
+  };
+
+  // UseCases
+  useCases: {
+    createErrorCode: CreateErrorCodeUseCase;
+    updateErrorCode: UpdateErrorCodeUseCase;
   };
 }
 
@@ -49,10 +59,24 @@ export function createContainer(): DIContainer {
     language: languageService,
   };
   
+  // Initialize UseCases
+  const createErrorCodeUseCase = new CreateErrorCodeUseCase(
+    db,
+    services.error, 
+    services.translation
+  );
+  const updateErrorCodeUseCase = new UpdateErrorCodeUseCase(db);
+
+  const useCases = {
+    createErrorCode: createErrorCodeUseCase,
+    updateErrorCode: updateErrorCodeUseCase,
+  };
+  
   // Return assembled container
   return {
     db,
-    services
+    services,
+    useCases,
   };
 }
 

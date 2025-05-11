@@ -1,27 +1,22 @@
 import { z } from 'zod';
 import { errorCodeBaseSchema } from './base.dto';
-import { createErrorCodeResponse } from './create.dto';
+import { errorCodeResponseSchema } from './create.dto';
 
 /**
- * Schema for updating an existing error code (request)
- * All fields are optional in updates
+ * Schema for updating an existing error code (request payload).
+ * All fields from errorCodeBaseSchema, including 'code', are made optional.
  */
-export const updateErrorCodeRequest = errorCodeBaseSchema
-  .extend({
-    categoryId: z.number()
-      .int('Category ID must be an integer')
-      .positive('Category ID must be a positive integer')
-      .nullable(),
-  })
-  .partial();
+export const updateErrorCodeRequestSchema = errorCodeBaseSchema.partial();
+
+export type UpdateErrorCodeRequestDto = z.infer<typeof updateErrorCodeRequestSchema>;
 
 /**
- * Schema for error code response after update
- * Uses the same schema as create response
+ * Schema for the response when an error code is updated.
+ * Uses the same detailed response schema as for creation.
  */
-export const updateErrorCodeResponse = createErrorCodeResponse;
+export const updateErrorCodeResponseSchema = errorCodeResponseSchema;
 
-// Backward compatibility
-export const updateErrorCodeSchema = updateErrorCodeRequest;
-export const updateErrorCodeRequestSchema = updateErrorCodeRequest;
-export const updateErrorCodeResponseSchema = updateErrorCodeResponse; 
+// For clarity and if other parts of the application expect these specific names:
+// export const updateErrorCodeRequest = updateErrorCodeRequestSchema;
+// export const updateErrorCodeResponse = updateErrorCodeResponseSchema;
+// export const updateErrorCodeSchema = updateErrorCodeRequestSchema; 

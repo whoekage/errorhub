@@ -1,329 +1,200 @@
 import { Logger } from 'pino';
-import { DataSource, Repository, FindOptionsRelations } from 'typeorm';
-import { ErrorTranslationEntity, ErrorCodeEntity, ErrorCategoryEntity } from '@/db';
+import { DataSource, Repository, FindOptionsRelations, EntityManager } from 'typeorm';
+import { ErrorCodeEntity, ErrorCategoryEntity, ErrorCodeStatus } from '@/db';
 import pino from 'pino';
 import { PaginationDto } from '@/dto/common/pagination.dto';
 import { offsetPaginate } from '@/utils/pagination';
 import { ResourceConflictError, ResourceNotFoundError, ServiceError } from '@/utils/errors';
+import { 
+  createErrorCodeRequestSchema, // This schema includes translations and categoryId, used for defining CreateErrorCodeInternalDto
+} from '@/dto/errors/create.dto'; 
+import { updateErrorCodeRequestSchema } from '@/dto/errors/update.dto';
+import { z } from 'zod';
 
-// Define interfaces within the file to avoid import errors
-interface CreateErrorDto {
-  code: string;
-  defaultMessage: string;
-  categoryId?: number;
-}
+// This DTO is for the ErrorService.create method, only containing fields for ErrorCodeEntity itself.
+const createErrorCodeInternalSchema = z.object({
+  code: createErrorCodeRequestSchema.shape.code, 
+  context: createErrorCodeRequestSchema.shape.context.optional(),
+  categoryIds: createErrorCodeRequestSchema.shape.categoryIds.optional(), // Changed from categoryId
+  status: z.nativeEnum(ErrorCodeStatus).optional(),         // Changed to nativeEnum
+});
+type CreateErrorCodeInternalDto = z.infer<typeof createErrorCodeInternalSchema>;
 
-interface UpdateErrorDto {
-  defaultMessage?: string;
-  categoryId?: number;
-}
+// CreateErrorServiceDto is no longer used as create method now uses CreateErrorCodeInternalDto
+// type CreateErrorServiceDto = z.infer<typeof createErrorCodeRequestSchema>; 
 
+type UpdateErrorServiceDto = z.infer<typeof updateErrorCodeRequestSchema>;
+
+// Read-only operation options
 interface GetErrorOptions {
   includeTranslations?: boolean;
-  includeCategory?: boolean;
-  language?: string;
-}
-
-interface LocalizedErrorResponse {
-  code: string;
-  message: string;
-  locale: string;
-  category?: string;
+  // includeCategory has been changed to includeCategories to reflect ManyToMany relation
+  includeCategories?: boolean; 
 }
 
 /**
  * Service for managing error codes, extending BaseListService for list operations.
  */
 export class ErrorService {
+  // DataSource is kept for initiating transactions at a higher level (Use Cases)
+  // Repositories initialized in constructor can be used for read operations outside explicit transactions
+  // or if a service method itself decides to manage its own simple transaction (less common with this pattern).
   private dataSource: DataSource;
   private errorCategoryRepository: Repository<ErrorCategoryEntity>;
-  private errorTranslationRepository: Repository<ErrorTranslationEntity>;
+  // private errorTranslationRepository: Repository<ErrorTranslationEntity>; // Will use from EntityManager
   private errorCodeRepository: Repository<ErrorCodeEntity>;
   private logger: Logger;
 
   constructor(dataSource: DataSource) {
-    this.dataSource = dataSource;
+    this.dataSource = dataSource; // Still needed for Use Cases to start transactions
     this.errorCodeRepository = this.dataSource.getRepository(ErrorCodeEntity);
     this.errorCategoryRepository = this.dataSource.getRepository(ErrorCategoryEntity);
-    this.errorTranslationRepository = this.dataSource.getRepository(ErrorTranslationEntity);
+    // this.errorTranslationRepository = this.dataSource.getRepository(ErrorTranslationEntity); // Not strictly needed if all writes go through EM
     this.logger = pino({ name: 'error-service' });
   }
 
+  // --- Helper methods for defining query capabilities (used by read methods) ---
   protected getAllowedFields(): (keyof ErrorCodeEntity)[] {
+    // Removed categoryId, categories will be handled by relations
     return [
-      'id', 
-      'code', 
-      'defaultMessage', 
-      'categoryId', 
-      'createdAt', 
-      'updatedAt'
+      'id', 'code', 'status', 'context', 'createdAt', 'updatedAt'
     ];
   }
 
   protected getSearchableFields(): (keyof ErrorCodeEntity)[] {
-    return ['code', 'defaultMessage'];
+    return ['code', 'context'];
   }
 
   protected getAllowedRelations(): string[] {
-    return ['category', 'translations'];
+    // Changed 'category' to 'categories'
+    return ['categories', 'translations'];
   }
   
-  async getAll(pagination: PaginationDto, baseUrl: string) {
+  // --- Read operations (typically do not require an external EntityManager unless part of a larger transaction with specific isolation needs) ---
+  async getAll(pagination: PaginationDto, baseUrl: string): Promise<unknown> {
     const result = await offsetPaginate<ErrorCodeEntity>(this.errorCodeRepository, {
       ...pagination,
       alias: 'error',
       searchableFields: this.getSearchableFields(),
-      baseUrl
+      // relations: this.getAllowedRelations(), // Enable if offsetPaginate supports it and it's needed
+      baseUrl,
     });
     return result;
   }
-  /**
-   * Get error code by its unique code
-   */
-  async getErrorByCode(code: string, options?: GetErrorOptions): Promise<ErrorCodeEntity | null> {
-    try {
-      const { 
-        includeTranslations = false,
-        includeCategory = false,
-        language
-      } = options || {};
 
+  async getByCode(code: string, options?: GetErrorOptions): Promise<ErrorCodeEntity | null> {
+    try {
+      const { includeTranslations = false, includeCategories = false } = options || {}; // Changed from includeCategory
       const findOptions: { relations?: FindOptionsRelations<ErrorCodeEntity> } = {};
       const relations: FindOptionsRelations<ErrorCodeEntity> = {};
-
-      if (includeTranslations) {
-        relations.translations = true;
-      }
-      if (includeCategory) {
-        relations.category = true;
-      }
-      if (Object.keys(relations).length > 0) {
-        findOptions.relations = relations;
-      }
+      if (includeTranslations) relations.translations = true;
+      if (includeCategories) relations.categories = true; // Changed from category to categories
+      if (Object.keys(relations).length > 0) findOptions.relations = relations;
       
-      const errorCode = await this.errorCodeRepository.findOne({
-        where: { code },
-        ...findOptions
-      });
-      
-      if (!errorCode) {
-        return null;
-      }
-
-      if (language && errorCode.translations) {
-        const translation = this.findBestTranslation(errorCode.translations, language);
-        errorCode.translations = translation ? [translation] : []; 
-      }
-      
-      return errorCode;
+      // Using the repository initialized in the constructor for this read operation
+      return this.errorCodeRepository.findOne({ where: { code }, ...findOptions });
     } catch (error) {
-      this.logger.error({ error, code }, 'Failed to get error code');
-      throw new ServiceError(`Failed to get error code: ${code}`, { cause: error });
+      this.logger.error({ error, code }, 'Failed to get error code by code');
+      throw new ServiceError(`Failed to get error code by code: ${code}`, { cause: error });
     }
   }
 
+  // --- Write operations: these methods now require an EntityManager to be passed in --- 
+
   /**
-   * Create a new error code
+   * Creates only the ErrorCodeEntity record. 
+   * Category validation/association and translation creation should be handled by the UseCase.
    */
-  async createError(data: CreateErrorDto): Promise<ErrorCodeEntity> {
+  async create(entityManager: EntityManager, data: CreateErrorCodeInternalDto): Promise<ErrorCodeEntity> {
     if (!data.code) {
-        throw new Error('Error code is required to create an error.');
+      throw new ServiceError('Error code is required for creation.', { statusCode: 400 });
     }
-    try {
-      const existing = await this.errorCodeRepository.findOneBy({ code: data.code });
-      if (existing) {
-        throw new ResourceConflictError(`Error code already exists: ${data.code}`);
-      }
 
-      if (data.categoryId) {
-        const category = await this.errorCategoryRepository.findOneBy({ id: data.categoryId });
-        if (!category) {
-          throw new ResourceNotFoundError(`Category not found: ${data.categoryId}`);
-        }
-      }
-      console.log({data});
-      const newError = this.errorCodeRepository.create(data as ErrorCodeEntity);
-      return this.errorCodeRepository.save(newError);
-    } catch (error) {
-      if (error instanceof ResourceConflictError || error instanceof ResourceNotFoundError) {
-        throw error;
-      }
-      this.logger.error({ error, data }, 'Failed to create error code');
-      throw new ServiceError('Failed to create error code', { cause: error });
+    const errorCodeRepo = entityManager.getRepository(ErrorCodeEntity);
+    const errorCategoryRepo = entityManager.getRepository(ErrorCategoryEntity);
+
+    const existing = await errorCodeRepo.findOneBy({ code: data.code });
+    if (existing) {
+      throw new ResourceConflictError(`Error code already exists: ${data.code}`);
     }
+    
+    const newErrorData: Partial<Omit<ErrorCodeEntity, 'categories' | 'id' | 'createdAt' | 'updatedAt' | 'translations'>> = {
+      code: data.code,
+      context: data.context,
+      status: data.status || ErrorCodeStatus.DRAFT, 
+    };
+
+    const newErrorCode = errorCodeRepo.create(newErrorData);
+    let savedError = await errorCodeRepo.save(newErrorCode);
+
+    if (data.categoryIds?.length) {
+      this.logger.info({ errorCodeId: savedError.id, categoryIds: data.categoryIds }, "Attempting to associate categories.");
+      const categories = await errorCategoryRepo.findByIds(data.categoryIds); 
+      if (categories.length !== data.categoryIds.length) {
+          const foundCategoryIds = categories.map(c => c.id);
+          const notFoundIds = data.categoryIds.filter(id => !foundCategoryIds.includes(id));
+          this.logger.warn({ notFoundIds }, "Some category IDs provided were not found. Associating only found categories.");
+          // Optional: throw error if not all categories are found
+          // throw new ResourceNotFoundError(`One or more categories not found: ${notFoundIds.join(', ')}`);
+      }
+      savedError.categories = categories; 
+      savedError = await errorCodeRepo.save(savedError); // Re-assign to get the potentially updated instance
+      this.logger.info({ errorCodeId: savedError.id, associatedCategoriesCount: categories.length }, "Categories associated.");
+    }
+    
+    // Return the instance that should have categories populated if they were set and saved.
+    // If `save` doesn't return relations or doesn't update the instance in memory reliably with them,
+    // a final findOne might be needed, but usually, TypeORM handles this for ManyToMany if eager loading is not used.
+    return savedError;
   }
 
-  /**
-   * Update an existing error code
-   */
-  async updateError(code: string, data: UpdateErrorDto): Promise<ErrorCodeEntity> {
-    try {
-      const existing = await this.errorCodeRepository.findOneBy({ code });
-      if (!existing) {
-        throw new ResourceNotFoundError(`Error code not found: ${code}`);
-      }
+  async update(entityManager: EntityManager, code: string, data: UpdateErrorServiceDto): Promise<ErrorCodeEntity> {
+    this.logger.info({ code, data }, "update called with EntityManager - core fields update.");
+    
+    const errorCodeRepo = entityManager.getRepository(ErrorCodeEntity);
+    const errorCategoryRepo = entityManager.getRepository(ErrorCategoryEntity);
 
-      if (data.categoryId) {
-        const category = await this.errorCategoryRepository.findOneBy({ id: data.categoryId });
-        if (!category) {
-          throw new ResourceNotFoundError(`Category not found: ${data.categoryId}`);
-        }
-      }
-
-      this.errorCodeRepository.merge(existing, data);
-      return this.errorCodeRepository.save(existing);
-    } catch (error) {
-      if (error instanceof ResourceNotFoundError) {
-        throw error;
-      }
-      this.logger.error({ error, code, data }, 'Failed to update error code');
-      throw new ServiceError('Failed to update error code', { cause: error });
+    const existingError = await errorCodeRepo.findOne({ where: { code }, relations: ['categories'] });
+    if (!existingError) {
+      throw new ResourceNotFoundError(`Error code not found: ${code}`);
     }
-  }
 
-  /**
-   * Delete an error code
-   */
-  async deleteError(code: string): Promise<boolean> {
-    try {
-      const result = await this.errorCodeRepository.delete({ code });
-      if (result.affected === 0) {
-        throw new ResourceNotFoundError(`Error code not found: ${code}`);
-      }
-      return true;
-    } catch (error) {
-      if (error instanceof ResourceNotFoundError) {
-        throw error;
-      }
-      this.logger.error({ error, code }, 'Failed to delete error code');
-      throw new ServiceError('Failed to delete error code', { cause: error });
-    }
-  }
+    // Update basic fields
+    if (data.context !== undefined) existingError.context = data.context;
+    if (data.status !== undefined) existingError.status = data.status as ErrorCodeStatus;
+    // code is the identifier, not updated here.
 
-  /**
-   * Get errors by category ID
-   */
-  async getErrorsByCategory(categoryId: number): Promise<ErrorCodeEntity[]> {
-    try {
-      return this.errorCodeRepository.find({ where: { categoryId } });
-    } catch (error) {
-      this.logger.error({ error, categoryId }, 'Failed to get errors by category');
-      throw new ServiceError('Failed to retrieve errors for category', { cause: error });
-    }
-  }
-
-  /**
-   * Get localized error message
-   */
-  async getLocalizedError(
-    code: string, 
-    language: string, 
-    params?: Record<string, string>
-  ): Promise<LocalizedErrorResponse> {
-    try {
-      const errorCode = await this.getErrorByCode(code, { 
-        includeTranslations: true, 
-        includeCategory: true,
-        language
-      });
-
-      if (!errorCode) {
-        throw new ResourceNotFoundError(`Error code not found: ${code}`);
-      }
-
-      let message = errorCode.defaultMessage;
-      let localeUsed = 'default';
-
-      if (errorCode.translations && errorCode.translations.length > 0) {
-        message = errorCode.translations[0].message;
-        localeUsed = language;
-      }
-
-      const formattedMessage = this.formatErrorMessage(message, params);
-      
-      return {
-        code: errorCode.code,
-        message: formattedMessage,
-        locale: localeUsed,
-        category: errorCode.category ? errorCode.category.name : undefined,
-      };
-    } catch (error) {
-      if (error instanceof ResourceNotFoundError) {
-        throw error;
-      }
-      this.logger.error({ error, code, language }, 'Failed to get localized error');
-      throw new ServiceError('Failed to retrieve localized error message', { cause: error });
-    }
-  }
-
-  /**
-   * Create or update a translation for an error code
-   */
-  async upsertTranslation(
-    code: string, 
-    language: string, 
-    message: string
-  ): Promise<ErrorTranslationEntity> {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      const errorCode = await queryRunner.manager.findOne(ErrorCodeEntity, { where: { code } });
-      if (!errorCode) {
-        throw new ResourceNotFoundError(`Error code not found: ${code}`);
-      }
-
-      let translation = await queryRunner.manager.findOne(ErrorTranslationEntity, {
-        where: { errorCode: { id: errorCode.id }, language }
-      });
-
-      if (translation) {
-        translation.message = message;
+    // Handle categoryIds update (full replacement of categories)
+    if (data.categoryIds !== undefined) {
+      if (data.categoryIds.length === 0) {
+        existingError.categories = [];
       } else {
-        translation = queryRunner.manager.create(ErrorTranslationEntity, {
-          errorCodeId: errorCode.id,
-          language,
-          message,
-          errorCode: errorCode
-        });
+        const categories = await errorCategoryRepo.findByIds(data.categoryIds);
+        if (categories.length !== data.categoryIds.length) {
+          const foundCategoryIds = categories.map(c => c.id);
+          const notFoundIds = data.categoryIds.filter(id => !foundCategoryIds.includes(id));
+          this.logger.warn({ notFoundIds }, "During update, some category IDs were not found. Associating only found categories.");
+          // Optional: throw error if not all categories are found
+          // throw new ResourceNotFoundError(`One or more categories not found for update: ${notFoundIds.join(', ')}`);
+        }
+        existingError.categories = categories;
       }
-
-      const savedTranslation = await queryRunner.manager.save(translation);
-      await queryRunner.commitTransaction();
-      return savedTranslation;
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      if (error instanceof ResourceNotFoundError) {
-        throw error;
-      }
-      this.logger.error({ error, code, language, message }, 'Failed to upsert translation');
-      throw new ServiceError('Failed to upsert translation', { cause: error });
-    } finally {
-      await queryRunner.release();
     }
+
+    const updatedError = await errorCodeRepo.save(existingError);
+    this.logger.info({ errorCodeId: updatedError.id }, "ErrorCode entity updated. Translations must be handled by UseCase.");
+    return updatedError;
   }
-
-  /**
-   * Helper to format error message parameters (e.g., replace {placeholder})
-   */
-  private formatErrorMessage(message: string, params?: Record<string, string>): string {
-    if (!params) {
-      return message;
+  
+  async delete(entityManager: EntityManager, code: string): Promise<boolean> {
+    this.logger.info({ code }, "delete called with EntityManager.");
+    const errorCodeRepo = entityManager.getRepository(ErrorCodeEntity);
+    // TODO: Consider what happens with translations - cascading delete in DB or manual deletion in UseCase?
+    // For now, just deleting the ErrorCodeEntity.
+    const result = await errorCodeRepo.delete({ code });
+    if (result.affected === 0) {
+      throw new ResourceNotFoundError(`Error code not found: ${code}`);
     }
-    return message.replace(/\{(\w+)\}/g, (_, key) => params[key] || `{${key}}`);
-  }
-
-  /**
-   * Helper to find the best matching translation (exact or language prefix)
-   */
-  private findBestTranslation(
-    translations: ErrorTranslationEntity[], 
-    language: string
-  ): ErrorTranslationEntity | null {
-    if (!translations || translations.length === 0) {
-        return null;
-    }
-    return translations.find(t => t.language === language) || null;
+    return true;
   }
 }

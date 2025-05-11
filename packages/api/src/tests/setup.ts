@@ -3,20 +3,21 @@ import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { beforeAll, afterAll, beforeEach } from 'vitest';
 import Fastify, { FastifyInstance } from 'fastify';
-import { ErrorCodeEntity, ErrorCategoryEntity, ErrorTranslationEntity, LanguageEntity } from '@/db';
-import { errorHandler } from '@/middleware/error-handler';
+import { ErrorCodeEntity, ErrorCategoryEntity, ErrorTranslationEntity, EnabledLanguageEntity } from '@/db';
 import validationPlugin from '@/plugins/validation-plugin';
 import routes from '@/routes/index';
 import { ErrorService } from '@/services/ErrorService';
 import { CategoryService } from '@/services/CategoryService';
 import { TranslationService } from '@/services/TranslationService';
-import { LanguageService } from '@/services/LanguageService';
+import { CreateErrorCodeUseCase } from '@/use-cases/error-code/CreateErrorCodeUseCase';
+import { DIContainer } from '@/di';
+import { ServiceError } from '@/utils/errors';
 
 // Create test database with explicit entity registration
 export const testDataSource = new DataSource({
   type: 'sqlite',
   database: ':memory:',
-  entities: [ErrorCodeEntity, ErrorCategoryEntity, ErrorTranslationEntity, LanguageEntity],
+  entities: [ErrorCodeEntity, ErrorCategoryEntity, ErrorTranslationEntity, EnabledLanguageEntity],
   synchronize: true,
   logging: false
 });
@@ -24,7 +25,7 @@ export const testDataSource = new DataSource({
 // Function to build test app with services that use test database
 export async function buildTestApp(): Promise<FastifyInstance> {
   const app = Fastify({
-    logger: false
+    logger: process.env.TEST_LOGGER === 'true' ? { level: 'info' } : false,
   });
 
   // Ensure test DB is initialized
@@ -33,17 +34,32 @@ export async function buildTestApp(): Promise<FastifyInstance> {
   }
   
   // Create fresh service instances using test database
+  const errorService = new ErrorService(testDataSource);
+  const categoryService = new CategoryService(testDataSource);
+  const translationService = new TranslationService(testDataSource);
+  
   const services = {
-    error: new ErrorService(testDataSource),
-    category: new CategoryService(testDataSource),
-    translation: new TranslationService(testDataSource),
-    language: new LanguageService(testDataSource)
+    error: errorService,
+    category: categoryService,
+    translation: translationService,
+  };
+  
+  // Initialize UseCases
+  const createErrorCodeUseCase = new CreateErrorCodeUseCase(
+    testDataSource, 
+    services.error, 
+    services.translation
+  );
+
+  const useCases = {
+    createErrorCode: createErrorCodeUseCase,
   };
   
   // Create test DI container with these services
-  const testContainer = {
+  const testContainer: DIContainer = {
     db: testDataSource,
-    services
+    services,
+    useCases,
   };
   
   // Set the container as a decorator
@@ -51,9 +67,11 @@ export async function buildTestApp(): Promise<FastifyInstance> {
   
   // Register standard middleware
   app.setErrorHandler((err, _req, reply) => {
-    // если у ошибки уже есть statusCode, используем его
-    reply.status((err as any).statusCode ?? 500).send({
-      message: err.message,
+    // Use statusCode from our custom errors if available
+    const statusCode = (err as ServiceError).statusCode || 500;
+    reply.status(statusCode).send({
+      name: (err as Error).name,
+      message: (err as Error).message,
     });
   });
   await app.register(validationPlugin);

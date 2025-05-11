@@ -1,32 +1,53 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany, Index, ManyToOne, JoinColumn, BaseEntity } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany, Index, ManyToMany, JoinTable } from 'typeorm';
 import { ErrorTranslationEntity } from './ErrorTranslationEntity';
 import { ErrorCategoryEntity } from './ErrorCategoryEntity';
 
+export enum ErrorCodeStatus {
+  DRAFT = 'draft',
+  PUBLISHED = 'published',
+}
+
+@Index(['code'], { unique: true })
 @Entity('error_codes')
-export class ErrorCodeEntity extends BaseEntity {
+export class ErrorCodeEntity {
   @PrimaryGeneratedColumn()
-  id: number;
+  id!: number;
 
-  @Column({ unique: true, nullable: false, length: 255, type: 'varchar' })
-  @Index()
-  code: string;
+  @Column({ type: 'varchar', length: 255 })
+  code!: string;
 
-  @ManyToOne(() => ErrorCategoryEntity, category => category.errorCodes, { nullable: true })
-  @JoinColumn({ name: 'categoryId', referencedColumnName: 'id' })
-  category: ErrorCategoryEntity | null;
+  @ManyToMany(() => ErrorCategoryEntity, (category) => category.errorCodes)
+  @JoinTable({
+    name: 'error_code_categories',
+    joinColumn: {
+        name: 'error_code_id',
+        referencedColumnName: 'id'
+    },
+    inverseJoinColumn: {
+        name: 'category_id',
+        referencedColumnName: 'id'
+    }
+  })
+  categories!: ErrorCategoryEntity[];
 
-  @Column({ nullable: true, type: 'int' })
-  categoryId: number | null;
+  @OneToMany(() => ErrorTranslationEntity, (translation) => translation.errorCode, {
+    cascade: true,
+  })
+  translations!: ErrorTranslationEntity[];
 
-  @Column({ type: 'text', nullable: false })
-  defaultMessage: string;
+  @Column({
+    type: 'varchar',
+    length: 50,
+    default: ErrorCodeStatus.DRAFT,
+  })
+  status!: ErrorCodeStatus;
 
-  @CreateDateColumn({ nullable: false })
-  createdAt: Date;
+  @Column({ type: 'text', nullable: true })
+  context?: string | null;
 
-  @UpdateDateColumn({ nullable: false })
-  updatedAt: Date;
+  @CreateDateColumn({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
+  createdAt!: Date;
 
-  @OneToMany(() => ErrorTranslationEntity, translation => translation.errorCode)
-  translations: ErrorTranslationEntity[];
+  @UpdateDateColumn({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP', onUpdate: 'CURRENT_TIMESTAMP' })
+  updatedAt!: Date;
 } 

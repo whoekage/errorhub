@@ -1,13 +1,38 @@
 // TranslationService.ts
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, Repository, EntityManager } from 'typeorm';
 import { ErrorTranslationEntity, ErrorCodeEntity } from '@/db';
 import { offsetPaginate } from '@/utils/pagination';
 import { Logger } from 'pino';
 import pino from 'pino';
+import { ResourceNotFoundError, ServiceError, ResourceConflictError } from '@/utils/errors';
 // Corrected DTO import and using placeholders for errors
-import { UpsertTranslationRequest } from '@/dto/translations/upsert.dto'; // Use existing DTO
-declare class ServiceError extends Error { constructor(message: string, options?: { cause: unknown }); }
-declare class ResourceNotFoundError extends Error { constructor(message: string); }
+// import { UpsertTranslationRequest } from '@/dto/translations/upsert.dto'; // Use existing DTO
+// Assuming a DTO for creation might look like this. 
+// It should be defined properly in the dto/translations folder.
+interface CreateTranslationServiceDto {
+  errorCodeId: number; // Or pass the full ErrorCodeEntity for easier relation assignment
+  // errorCode: ErrorCodeEntity; // Alternative: pass the full entity
+  language: string;
+  message: string;
+}
+
+// Placeholder DTO for update, to be defined properly
+interface UpdateTranslationServiceDto {
+  message?: string;
+  // language and errorCodeId are typically not updated, but a new entry is made or old one deleted.
+}
+
+// DTO for individual translation item in bulk creation
+interface BulkCreateTranslationItemDto {
+  language: string;
+  message: string;
+}
+
+// Interface for potential database error structure
+interface DatabaseError extends Error { // Added interface
+  code?: string;
+  constraint?: string;
+}
 
 /**
  * Service for managing error translations, extending BaseListService for list operations.
@@ -83,80 +108,6 @@ export class TranslationService {
   }
   
   /**
-   * Create or update a translation (Upsert) - Adapting existing method logic
-   */
-  async upsertTranslation(data: UpsertTranslationRequest): Promise<ErrorTranslationEntity> {
-    // Use the existing upsert method which expects UpsertTranslationRequest
-    return this.upsert(data);
-  }
-  
-  // Keep the original upsert method (adapting parameter name)
-   async upsert(data: UpsertTranslationRequest): Promise<ErrorTranslationEntity> {
-     const { errorCode: code, language, message } = data; // Use errorCode from DTO, assign to 'code' locally
-     return this.dataSource.transaction(async (entityManager) => {
-       const errorCodeEntity = await entityManager.findOne(ErrorCodeEntity, {
-         where: { code } // Use the local 'code' variable
-       });
-
-       if (!errorCodeEntity) {
-         throw new ResourceNotFoundError(`Error code not found: ${code}`);
-       }
-
-       let result: ErrorTranslationEntity;
-
-       const existingTranslation = await entityManager.findOne(ErrorTranslationEntity, {
-         where: {
-           errorCode: {
-             id: errorCodeEntity.id
-           },
-           language: language // Use language directly from DTO
-         }
-       });
-
-       if (existingTranslation) {
-         existingTranslation.message = message; // Use message directly from DTO
-         result = await entityManager.save(existingTranslation);
-       } else {
-         const newTranslation = entityManager.create(ErrorTranslationEntity, {
-           errorCode: errorCodeEntity, // Pass the full entity
-           language: language,
-           message: message
-         });
-         result = await entityManager.save(newTranslation);
-       }
-       return result;
-     });
-   }
-
-  /**
-   * Delete a specific translation - using existing method
-   */
-  async deleteTranslation(id: number): Promise<boolean> {
-     const response = await this.delete(id);
-     return response.success;
-  }
-
-  // Keep the original delete method
-  async delete(id: number): Promise<{ success: boolean }> {
-    const translation = await this.errorTranslationRepository.findOne({ 
-      where: { id }
-    });
-
-    if (!translation) {
-      throw new ResourceNotFoundError(`Translation not found: ${id}`);
-    }   
-    const result = await this.errorTranslationRepository.delete(id);
-    return { success: result.affected !== null && result.affected !== undefined && result.affected > 0 };
-  }
-
-  // Keep deleteAllByErrorCode if needed
-  async deleteAllByErrorCode(code: string): Promise<{ success: boolean }> {
-    // Use 'code' instead of 'errorCode' which might be the object
-    const result = await this.errorTranslationRepository.delete({ errorCode: { code: code } });
-    return { success: result.affected !== null && result.affected !== undefined && result.affected > 0 };
-  }
-
-  /**
    * Retrieves translations list using keyset pagination.
    */
   async getAll(query: Record<string, unknown>, baseUrl: string) {
@@ -168,4 +119,184 @@ export class TranslationService {
     });
     return result;
   }
+
+  // --- Write methods (requiring EntityManager, called by UseCases) ---
+
+  /**
+   * Creates a new ErrorTranslationEntity record.
+   * Expects errorCodeId to be valid and exist (validated by UseCase).
+   */
+  async create(entityManager: EntityManager, data: CreateTranslationServiceDto): Promise<ErrorTranslationEntity> {
+    const { errorCodeId, language, message } = data;
+    this.logger.info({ errorCodeId, language, messageLength: message.length }, "create translation called with EntityManager.");
+
+    const translationRepo = entityManager.getRepository(ErrorTranslationEntity);
+    
+    // The UseCase should ensure ErrorCodeEntity for errorCodeId exists.
+    // For creating the relation, we need either the ID or the entity itself.
+    // If ErrorTranslationEntity has `errorCodeId` as a column:
+    // const newTranslation = translationRepo.create({ errorCodeId, language, message });
+    // If ErrorTranslationEntity has `errorCode: ErrorCodeEntity` relation:
+    const errorCodeEntity = await entityManager.getRepository(ErrorCodeEntity).findOneBy({ id: errorCodeId });
+    if (!errorCodeEntity) {
+        // This check is a safeguard; UseCase should ideally prevent this.
+        throw new ResourceNotFoundError(`Error code with ID ${errorCodeId} not found, cannot create translation.`);
+    }
+
+    // Check if this specific translation already exists to prevent duplicates if there's a unique constraint
+    // This logic might be better in the UseCase if it decides to update instead of fail
+    const existingTranslation = await translationRepo.findOne({
+        where: { errorCode: { id: errorCodeId }, language }
+    });
+    if (existingTranslation) {
+        this.logger.warn({ errorCodeId, language }, "Translation already exists. Consider using an update/upsert method or ensuring unique data from UseCase.");
+        // Depending on desired behavior, either throw an error or allow update (current is create-only)
+        throw new ServiceError('Translation for this error code and language already exists.', { statusCode: 409 }); // 409 Conflict
+    }
+
+    const newTranslation = translationRepo.create({ 
+      errorCode: errorCodeEntity, // Assign the full ErrorCodeEntity instance
+      language,
+      message 
+    });
+    
+    try {
+      return await translationRepo.save(newTranslation);
+    } catch (error) {
+      this.logger.error({ error, data }, "Failed to save new translation.");
+      throw new ServiceError('Failed to save new translation.', { cause: error });
+    }
+  }
+
+  /**
+   * Updates an existing ErrorTranslationEntity record.
+   * Requires the ID of the translation to update.
+   */
+  async update(entityManager: EntityManager, translationId: number, data: UpdateTranslationServiceDto): Promise<ErrorTranslationEntity> {
+    this.logger.info({ translationId, data }, "update translation called with EntityManager.");
+    const translationRepo = entityManager.getRepository(ErrorTranslationEntity);
+
+    const translation = await translationRepo.findOneBy({ id: translationId });
+    if (!translation) {
+      throw new ResourceNotFoundError(`Translation with ID ${translationId} not found.`);
+    }
+
+    if (data.message !== undefined) {
+      translation.message = data.message;
+    }
+    // Language and errorCodeId are typically not changed for an existing translation record.
+    // If they need to change, it's usually a delete + create new.
+
+    try {
+      return await translationRepo.save(translation);
+    } catch (error) {
+      this.logger.error({ error, translationId, data }, "Failed to update translation.");
+      throw new ServiceError('Failed to update translation.', { cause: error });
+    }
+  }
+
+  /**
+   * Deletes an ErrorTranslationEntity record by its ID.
+   */
+  async delete(entityManager: EntityManager, translationId: number): Promise<boolean> {
+    this.logger.info({ translationId }, "delete translation called with EntityManager.");
+    const translationRepo = entityManager.getRepository(ErrorTranslationEntity);
+    const result = await translationRepo.delete({ id: translationId });
+    if (result.affected === 0) {
+      throw new ResourceNotFoundError(`Translation with ID ${translationId} not found for deletion.`);
+    }
+    return true;
+  }
+
+  /**
+   * Creates multiple ErrorTranslationEntity records in bulk for a given error code.
+   * Skips creating a translation if one for the same language already exists for the error code.
+   */
+  async createBulk(
+    entityManager: EntityManager, 
+    errorCodeId: number, 
+    translations: BulkCreateTranslationItemDto[]
+  ): Promise<ErrorTranslationEntity[]> {
+    this.logger.info({ errorCodeId, translationsCount: translations.length }, "createBulk translations called with EntityManager.");
+
+    const translationRepo = entityManager.getRepository(ErrorTranslationEntity);
+    const errorCodeRepo = entityManager.getRepository(ErrorCodeEntity); // To fetch the ErrorCodeEntity instance
+
+    // 1. Fetch the ErrorCodeEntity to associate with translations
+    const errorCodeEntity = await errorCodeRepo.findOneBy({ id: errorCodeId });
+    if (!errorCodeEntity) {
+      this.logger.error({ errorCodeId }, "Error code not found, cannot create bulk translations.");
+      throw new ResourceNotFoundError(`Error code with ID ${errorCodeId} not found, cannot create bulk translations.`);
+    }
+
+    const newTranslationsToSave: Partial<ErrorTranslationEntity>[] = [];
+    const createdTranslations: ErrorTranslationEntity[] = [];
+
+    for (const item of translations) {
+      if (!item.language || !item.message || item.message.trim() === '') {
+        this.logger.warn({ errorCodeId, item }, "Skipping translation due to empty language or message.");
+        continue;
+      }
+
+      // 2. Check if this specific translation already exists
+      const existingTranslation = await translationRepo.findOne({
+        where: { errorCode: { id: errorCodeId }, language: item.language }
+      });
+
+      if (existingTranslation) {
+        this.logger.warn({ errorCodeId, language: item.language }, "Translation already exists for this language. Skipping in bulk create.");
+        // Potentially add to a list of skipped/updated items if needed to return more detailed info
+        continue;
+      } else {
+        newTranslationsToSave.push({
+          errorCode: errorCodeEntity, // Associate with the fetched ErrorCodeEntity instance
+          language: item.language,
+          message: item.message
+        });
+      }
+    }
+
+    // 3. Save all new translations in one go if any are to be saved
+    if (newTranslationsToSave.length > 0) {
+      this.logger.info({ errorCodeId, count: newTranslationsToSave.length }, "Saving new translations in bulk.");
+      try {
+        const savedEntities = await translationRepo.save(newTranslationsToSave);
+        createdTranslations.push(...savedEntities);
+        this.logger.info({ errorCodeId, count: savedEntities.length }, "Successfully saved translations in bulk.");
+      } catch (error) {
+        this.logger.error({ error, errorCodeId }, "Failed to save translations in bulk.");
+        const dbError = error as DatabaseError; // Using the defined interface for type assertion
+        if (dbError.code === 'ER_DUP_ENTRY' || dbError.constraint === 'unique_translation_constraint_name') { 
+            throw new ResourceConflictError('A conflict occurred while saving translations. Some might already exist.');
+        }
+        throw new ServiceError('Failed to save new translations in bulk.', { cause: error });
+      }
+    }
+    
+    return createdTranslations; // Return only the actually created translations
+  }
+
+  /**
+   * Deletes all ErrorTranslationEntity records for a specific error code ID.
+   * Uses the provided EntityManager to ensure operation within a transaction.
+   */
+  async deleteAllByErrorCodeId(entityManager: EntityManager, errorCodeId: number): Promise<void> {
+    this.logger.info({ errorCodeId }, "deleteAllByErrorCodeId called with EntityManager.");
+    const translationRepo = entityManager.getRepository(ErrorTranslationEntity);
+    
+    // Find all translations associated with this errorCodeId via the relation
+    const translationsToDelete = await translationRepo.find({
+      where: { errorCode: { id: errorCodeId } } // Assumes 'errorCode' is a relation to ErrorCodeEntity
+    });
+
+    if (translationsToDelete.length > 0) {
+      await translationRepo.remove(translationsToDelete);
+      this.logger.info({ errorCodeId, count: translationsToDelete.length }, "Successfully deleted translations by errorCodeId.");
+    } else {
+      this.logger.info({ errorCodeId }, "No translations found to delete for this errorCodeId.");
+    }
+  }
+
+  // --- Deprecated/Old Methods (To be removed or refactored if still used elsewhere) ---
+  // ... (if any)
 }
