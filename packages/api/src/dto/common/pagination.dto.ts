@@ -12,7 +12,6 @@ export const paginationSchema = z.object({
   limit: z.coerce.number()
     .int('Limit must be an integer')
     .positive('Limit must be a positive integer')
-    .max(100, 'Limit cannot exceed 100 items per page')
     .default(20)
     .optional(),
   sort: z.string().default('id').optional(),

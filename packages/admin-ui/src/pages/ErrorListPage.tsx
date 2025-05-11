@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { PlusCircle, Search } from "lucide-react"; // Keep Search, PlusCircle
 import { Input } from "@/components/ui/input";
+import { useNavigate } from "react-router-dom"; // Import useNavigate
 // Removed Button from here as it's not used for individual cards now, but might be needed for "Create New" if it's a button and not a card.
 // For now, "Create New" is a Card.
 
@@ -43,6 +44,7 @@ function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number) {
 const ErrorListPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+  const navigate = useNavigate(); // Initialize useNavigate
 
   // Debounce effect for search term
   useEffect(() => {
@@ -102,7 +104,7 @@ const ErrorListPage: React.FC = () => {
         {/* Карточка создания нового Error Code */}
         <Card
           className="flex flex-col items-center justify-center h-40 cursor-pointer hover:bg-muted/50 transition border-dashed border-2 hover:border-primary"
-          onClick={() => { /* navigate('/errors/new'); */ console.log('Create new error code') }}
+          onClick={() => navigate('/errors/new')} // Updated onClick to use navigate
         >
           <PlusCircle className="w-10 h-10 text-primary mb-2" />
           <div className="font-semibold text-lg">New Error Code</div>
